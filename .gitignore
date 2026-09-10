@@ -1,0 +1,14 @@
+ReportLayout.exe
+build-signature.txt
+startup-error.txt
+Report-*/
+*.indd
+*.pdf
+*.pdb
+bin/
+obj/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+dist/
