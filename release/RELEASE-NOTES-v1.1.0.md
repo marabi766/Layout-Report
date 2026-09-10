@@ -1,21 +1,7 @@
 # Report Layout v1.1.0
 
-First documented release of the Windows utility for converting Word reports into editable InDesign documents.
+This release added the English Windows interface, application branding and icons, per-user installation, Desktop and Start Menu shortcuts, tray behavior, guarded success notifications, and complete project documentation.
 
-## Highlights
+It also improved table-content validation, preserved overset cell text through the internal text model, disabled automatic kashidas, and normalized numbered-heading separators to one ordinary space.
 
-- English interface and report/template/build workflow
-- Editable INDD and IDML plus PDF review output
-- Automatic page flow and editable tables
-- Persian RTL typography with kashidas disabled
-- One-space numbered-heading normalization
-- Supplied logo across app, tray, taskbar, Desktop, and Start Menu
-- Guarded success dialog and diagnostic logs
-
-## Requirements and installation
-
-Windows 10/11, PowerShell 5.1, .NET Framework, and Adobe InDesign 21.3. Extract the release ZIP, close older instances, and run `Start.vbs`.
-
-## Validation
-
-Portable engine tests pass. Final Windows, shortcut, icon, and InDesign acceptance testing remains required on the target installation.
+The release targets Windows 10/11 and Adobe InDesign 21.3. Extract the complete package and run `Start.vbs` (`Start.cmd` is the fallback launcher).

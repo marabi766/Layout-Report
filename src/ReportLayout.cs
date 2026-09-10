@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Drawing;
 using System.Windows.Forms;
@@ -10,107 +10,158 @@ using System.Collections.Generic;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Text;
+using System.Net;
+using System.Text.RegularExpressions;
 
 [assembly: AssemblyTitle("Report Layout")]
-[assembly: AssemblyVersion("1.1.1.0")]
+[assembly: AssemblyVersion("2.0.0.0")]
+[assembly: AssemblyInformationalVersion("2.0.0-preview.1")]
 public sealed class ReportLayout : Form {
+    static bool placeholderEdition;
+    public const string VersionLabel="2.0.0-preview.1";
     readonly string root=AppDomain.CurrentDomain.BaseDirectory;
-    TextBox report=new TextBox(), template=new TextBox(), title=new TextBox(), output=new TextBox(), log=new TextBox();
-    Button chooseReport=new Button(),chooseTemplate=new Button(),chooseOutput=new Button(),build=new Button(),openOutput=new Button();
-    CheckBox cover=new CheckBox(); ProgressBar progress=new ProgressBar();
-    bool busy; string lastOutput; NotifyIcon tray; PictureBox logo;
-    [STAThread] public static void Main(){Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);Application.Run(new ReportLayout());}
+    TabControl tabs=new TabControl();
+    TextBox template=new TextBox(),output=new TextBox(),log=new TextBox(),subtitle=new TextBox(),author=new TextBox(),organization=new TextBox(),date=new TextBox(),repository=new TextBox();
+    DataGridView queue=new DataGridView(),results=new DataGridView(); PropertyGrid properties=new PropertyGrid();
+    CheckBox cover=new CheckBox(),keepGoing=new CheckBox(),updateAtStart=new CheckBox(); ComboBox presets=new ComboBox();
+    Button build,validate,stop,update; ProgressBar progress=new ProgressBar(); Label status=new Label();
+    List<Control> locked=new List<Control>(); volatile bool stopping; volatile string cancelFile; bool busy,checkingUpdate; string lastOutput; NotifyIcon tray; PictureBox logo;
+    LayoutOptions layout=new LayoutOptions();
+    [STAThread] public static void Main(string[] args){placeholderEdition=Array.Exists(args,a=>String.Equals(a,"--image-placeholders",StringComparison.OrdinalIgnoreCase));SettingsStore.ProfileName=placeholderEdition?"settings-placeholders.json":"settings.json";bool created;using(Mutex single=new Mutex(true,"Local\\ReportLayoutPreview",out created)){if(!created){MessageBox.Show("Report Layout Preview is already running. Close it before opening the other edition.","Report Layout");return;}try{Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);Application.Run(new ReportLayout());}finally{single.ReleaseMutex();}}}
     public ReportLayout(){
-        Text="Report Layout 1.1.1"; ClientSize=new Size(840,650);MinimumSize=Size;MaximumSize=Size;StartPosition=FormStartPosition.CenterScreen;
-        AutoScaleMode=AutoScaleMode.Dpi;BackColor=Color.FromArgb(245,247,250);Font=new Font("Segoe UI",10);RightToLeft=RightToLeft.No;
-        string iconPath=Path.Combine(root,"assets","ReportLayout.ico");
-        Icon=new Icon(iconPath,32,32);ShowIcon=true;
-        logo=new PictureBox();logo.SetBounds(30,16,100,100);logo.SizeMode=PictureBoxSizeMode.Zoom;logo.Image=Image.FromFile(Path.Combine(root,"assets","ReportLayout.png"));Controls.Add(logo);
-        Label h=new Label();h.Text="Report Layout";h.Font=new Font("Segoe UI",23,FontStyle.Bold);h.ForeColor=Color.FromArgb(20,65,120);h.SetBounds(145,23,650,44);Controls.Add(h);
-        Label sub=new Label();sub.Text="Turn Word reports into editable InDesign documents.";sub.SetBounds(148,75,650,28);Controls.Add(sub);
-        MakeRow(report,chooseReport,"Select Report",133);MakeRow(template,chooseTemplate,"Select Template",184);
-        Label tl=new Label();tl.Text="Report Title";tl.SetBounds(30,239,140,30);Controls.Add(tl);title.SetBounds(185,235,625,32);title.RightToLeft=RightToLeft.Yes;Controls.Add(title);
-        MakeRow(output,chooseOutput,"Output Folder",286);output.Text=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Report Layout");
-        template.Text=Path.Combine(root,"assets","Template.idml");
-        cover.Text="Add a cover page";cover.Checked=true;cover.SetBounds(30,334,270,28);Controls.Add(cover);
-        build.Text="Build Report";build.SetBounds(30,377,220,45);build.BackColor=Color.FromArgb(21,79,158);build.ForeColor=Color.White;build.FlatStyle=FlatStyle.Flat;Controls.Add(build);
-        openOutput.Text="Open Output Folder";openOutput.SetBounds(268,377,220,45);openOutput.Enabled=false;Controls.Add(openOutput);
-        Label tip=new Label();tip.Text="Minimize to keep the app in the system tray.";tip.SetBounds(30,435,760,24);Controls.Add(tip);
-        progress.SetBounds(30,467,780,8);Controls.Add(progress);
-        log.SetBounds(30,490,780,134);log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;log.BackColor=Color.White;Controls.Add(log);
-        chooseReport.Click+=delegate {using(OpenFileDialog d=new OpenFileDialog()){d.Title="Select Word Report";d.Filter="Word report (*.docx)|*.docx";if(d.ShowDialog()==DialogResult.OK){report.Text=d.FileName;title.Text=Path.GetFileNameWithoutExtension(d.FileName);}}};
-        chooseTemplate.Click+=delegate {using(OpenFileDialog d=new OpenFileDialog()){d.Title="Select InDesign Template";d.Filter="InDesign template|*.idml;*.indd;*.indt";if(d.ShowDialog()==DialogResult.OK)template.Text=d.FileName;}};
-        chooseOutput.Click+=delegate {using(FolderBrowserDialog d=new FolderBrowserDialog()){d.Description="Select Output Folder";if(d.ShowDialog()==DialogResult.OK)output.Text=d.SelectedPath;}};
-        build.Click+=delegate {StartBuild();};openOutput.Click+=delegate {OpenOutput();};
-        ContextMenuStrip menu=new ContextMenuStrip();menu.Items.Add("Open Report Layout",null,delegate {ShowMain();});menu.Items.Add("Open Output Folder",null,delegate {OpenOutput();});menu.Items.Add(new ToolStripSeparator());menu.Items.Add("Exit",null,delegate {Close();});
-        tray=new NotifyIcon();tray.Icon=new Icon(iconPath,16,16);tray.Text="Report Layout";tray.ContextMenuStrip=menu;tray.Visible=true;tray.DoubleClick+=delegate {ShowMain();};
-        Resize+=delegate {if(WindowState==FormWindowState.Minimized)Hide();};
-        FormClosing+=delegate(object sender,FormClosingEventArgs e){if(busy){e.Cancel=true;ShowMain();MessageBox.Show(this,"A report is being built. Please wait until the operation finishes.","Report Layout",MessageBoxButtons.OK,MessageBoxIcon.Information);}};
-        FormClosed+=delegate {tray.Visible=false;tray.Icon.Dispose();tray.Dispose();menu.Dispose();logo.Image.Dispose();Icon.Dispose();};
-        AddLog("Ready. The included template is selected. InDesign must be installed.");
+        Text="Report Layout "+VersionLabel+(placeholderEdition?" - Image Placeholders":"");ClientSize=new Size(1000,760);MinimumSize=new Size(850,650);StartPosition=FormStartPosition.CenterScreen;AutoScaleMode=AutoScaleMode.Dpi;BackColor=Color.FromArgb(245,247,250);Font=new Font("Segoe UI",10);RightToLeft=RightToLeft.No;
+        string iconPath=Path.Combine(root,"assets","ReportLayout.ico");Icon=new Icon(iconPath,32,32);
+        Panel header=new Panel();header.Height=105;header.Dock=DockStyle.Top;Controls.Add(header);
+        logo=new PictureBox();logo.SetBounds(20,10,85,85);logo.SizeMode=PictureBoxSizeMode.Zoom;logo.Image=Image.FromFile(Path.Combine(root,"assets","ReportLayout.png"));header.Controls.Add(logo);
+        Label name=new Label();name.Text="Report Layout";name.Font=new Font("Segoe UI",23,FontStyle.Bold);name.ForeColor=Color.FromArgb(21,79,158);name.SetBounds(125,17,650,42);header.Controls.Add(name);
+        Label hint=new Label();hint.Text="Word to InDesign | Layout presets, batch reports and review | "+VersionLabel;hint.SetBounds(128,64,800,30);header.Controls.Add(hint);
+        Panel bottom=new Panel();bottom.Height=90;bottom.Dock=DockStyle.Bottom;Controls.Add(bottom);
+        FlowLayoutPanel actions=new FlowLayoutPanel();actions.Dock=DockStyle.Top;actions.Height=48;bottom.Controls.Add(actions);
+        build=ButtonAt(actions,"Build Reports",delegate{StartWork(false);});build.BackColor=Color.FromArgb(21,79,158);build.ForeColor=Color.White;
+        validate=ButtonAt(actions,"Validate Template",delegate{StartWork(true);});
+        stop=ButtonAt(actions,"Cancel Current Job",RequestStop);stop.Enabled=false;
+        ButtonAt(actions,"Open Output Folder",delegate{OpenPath(lastOutput??output.Text);});
+        progress.Dock=DockStyle.Bottom;progress.Height=7;bottom.Controls.Add(progress);status.Dock=DockStyle.Bottom;status.Height=28;status.Text="Ready";bottom.Controls.Add(status);
+        tabs.Dock=DockStyle.Fill;Controls.Add(tabs);tabs.BringToFront();
+        TabPage reportsPage=Page("Reports"),layoutPage=Page("Layout Settings"),detailsPage=Page("Cover & Details"),resultPage=Page("Results"),settingsPage=Page("Preferences"),logPage=Page("Log");
+        locked.Add(reportsPage);locked.Add(layoutPage);locked.Add(detailsPage);locked.Add(settingsPage);
+        TableLayoutPanel panel=new TableLayoutPanel();panel.Dock=DockStyle.Fill;panel.ColumnCount=1;panel.RowCount=5;panel.RowStyles.Add(new RowStyle(SizeType.Absolute,44));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,44));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,42));panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,36));reportsPage.Controls.Add(panel);
+        panel.Controls.Add(PathRow("Select Template",template,delegate{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="InDesign templates|*.idml;*.indd;*.indt";if(d.ShowDialog(this)==DialogResult.OK)template.Text=d.FileName;}}),0,0);
+        panel.Controls.Add(PathRow("Output Folder",output,delegate{using(FolderBrowserDialog d=new FolderBrowserDialog()){if(d.ShowDialog(this)==DialogResult.OK)output.Text=d.SelectedPath;}}),0,1);
+        FlowLayoutPanel queueButtons=new FlowLayoutPanel();queueButtons.Dock=DockStyle.Fill;panel.Controls.Add(queueButtons,0,2);
+        ButtonAt(queueButtons,"Select Reports",delegate{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="Word reports|*.docx";d.Multiselect=true;if(d.ShowDialog(this)==DialogResult.OK)foreach(string f in d.FileNames)queue.Rows.Add(f,"");}});
+        ButtonAt(queueButtons,"Set Selected Title",delegate{if(queue.SelectedRows.Count==0){MessageBox.Show(this,"Select a report row first.","Report title");return;}queue.CurrentCell=queue.SelectedRows[0].Cells[1];queue.BeginEdit(true);});
+        ButtonAt(queueButtons,"Remove Selected",delegate{foreach(DataGridViewRow r in queue.SelectedRows)queue.Rows.Remove(r);});ButtonAt(queueButtons,"Clear Queue",delegate{queue.Rows.Clear();});
+        Grid(queue);queue.ReadOnly=false;queue.Columns.Add("Report","DOCX report");queue.Columns.Add("Title","Report title — required and editable");queue.Columns[0].ReadOnly=true;panel.Controls.Add(queue,0,3);
+        keepGoing.Text="Continue with the next report if one fails";keepGoing.Checked=true;keepGoing.Dock=DockStyle.Fill;panel.Controls.Add(keepGoing,0,4);
+        properties.Dock=DockStyle.Fill;properties.PropertySort=PropertySort.Categorized;properties.SelectedObject=layout;layoutPage.Controls.Add(properties);
+        FlowLayoutPanel presetBar=new FlowLayoutPanel();presetBar.Dock=DockStyle.Top;presetBar.Height=84;layoutPage.Controls.Add(presetBar);
+        presets.DropDownStyle=ComboBoxStyle.DropDownList;presets.Width=185;presets.Items.AddRange(new object[]{"Economic Report","Book Summary","Research Report","Compact Report"});presets.SelectedIndex=0;presetBar.Controls.Add(presets);
+        ButtonAt(presetBar,"Apply Preset",delegate{layout=LayoutOptions.Preset(Convert.ToString(presets.SelectedItem));properties.SelectedObject=layout;});ButtonAt(presetBar,"Import Preset",delegate{ImportPreset();});ButtonAt(presetBar,"Export Preset",delegate{ExportPreset();});ButtonAt(presetBar,"Choose Color",delegate{ChooseColor();});
+        TableLayoutPanel details=FieldsPanel(detailsPage);cover.Text="Add cover page";cover.Checked=true;cover.AutoSize=true;details.Controls.Add(cover,1,0);
+        Field(details,"Subtitle",subtitle,1);Field(details,"Author",author,2);Field(details,"Organization",organization,3);Field(details,"Report date",date,4);foreach(TextBox b in new TextBox[]{subtitle,author,organization,date})b.RightToLeft=RightToLeft.Yes;
+        Note(details,"The title comes from each queue row. Cover details apply to all reports.\r\nThe author and title are also written to PDF metadata.",5);
+        Grid(results);foreach(string c in new string[]{"Report","Status","Pages","Tables","Headings","Missing Fonts","Warnings","Folder"})results.Columns.Add(c,c);results.Columns[7].Visible=false;resultPage.Controls.Add(results);
+        FlowLayoutPanel resultButtons=new FlowLayoutPanel();resultButtons.Dock=DockStyle.Bottom;resultButtons.Height=44;resultPage.Controls.Add(resultButtons);
+        ButtonAt(resultButtons,"Open PDF",delegate{OpenResult("Report.pdf");});ButtonAt(resultButtons,"Open INDD",delegate{OpenResult("Report.indd");});ButtonAt(resultButtons,"Open Folder",delegate{OpenResult("");});ButtonAt(resultButtons,"View Details",delegate{OpenResult("result.json");});
+        TableLayoutPanel prefs=FieldsPanel(settingsPage);Field(prefs,"GitHub repository",repository,0);repository.Text="marabi766/report-layout";
+        updateAtStart.Text="Check for updates at startup (optional network request)";updateAtStart.AutoSize=true;prefs.Controls.Add(updateAtStart,1,1);
+        FlowLayoutPanel preferenceButtons=new FlowLayoutPanel();preferenceButtons.AutoSize=true;prefs.Controls.Add(preferenceButtons,1,2);
+        update=ButtonAt(preferenceButtons,"Check for Updates",delegate{CheckUpdates(false);});ButtonAt(preferenceButtons,"Save Preferences",delegate{SaveSettings();});ButtonAt(preferenceButtons,"Open Settings Folder",delegate{Directory.CreateDirectory(SettingsStore.Folder);OpenPath(SettingsStore.Folder);});
+        Note(prefs,"Settings and queue paths stay on this computer. No report content is uploaded.\r\nUpdate checks read release metadata only. No installer runs automatically.\r\nPrivate repositories require an authenticated GitHub CLI (gh auth login).\r\nMinimize to keep the app in the system tray.",3);
+        log.Dock=DockStyle.Fill;log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;log.WordWrap=true;logPage.Controls.Add(log);
+        ContextMenuStrip menu=new ContextMenuStrip();menu.Items.Add("Open Report Layout",null,delegate{ShowMain();});menu.Items.Add("Open Output Folder",null,delegate{OpenPath(lastOutput??output.Text);});menu.Items.Add("Exit",null,delegate{Close();});
+        tray=new NotifyIcon();tray.Icon=new Icon(iconPath,16,16);tray.Text="Report Layout";tray.ContextMenuStrip=menu;tray.Visible=true;tray.DoubleClick+=delegate{ShowMain();};
+        Resize+=delegate{if(WindowState==FormWindowState.Minimized)Hide();};
+        FormClosing+=delegate(object sender,FormClosingEventArgs e){if(busy){e.Cancel=true;ShowMain();RequestStop();MessageBox.Show(this,"Cancellation was requested. Report Layout will close the working copy and return when InDesign reaches the next safe checkpoint.","Report Layout");}else SaveSettings();};
+        FormClosed+=delegate{tray.Visible=false;tray.Icon.Dispose();tray.Dispose();menu.Dispose();logo.Image.Dispose();Icon.Dispose();};
+        template.Text=Path.Combine(root,"assets","Template.idml");output.Text=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Report Layout");LoadSettings();if(placeholderEdition){layout.ReplaceImagesWithPlaceholders=true;properties.Refresh();}
+        Shown+=delegate{if(updateAtStart.Checked)CheckUpdates(true);};AddLog("Ready. Validate Template loads InDesign fonts and PDF presets. Preview version: Windows/InDesign acceptance testing is still required.");
     }
+    TabPage Page(string text){TabPage p=new TabPage(text);p.Padding=new Padding(10);tabs.TabPages.Add(p);return p;}
+    static TableLayoutPanel FieldsPanel(Control parent){TableLayoutPanel p=new TableLayoutPanel();p.Dock=DockStyle.Top;p.AutoSize=true;p.ColumnCount=2;p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,170));p.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));parent.Controls.Add(p);return p;}
+    static void Note(TableLayoutPanel p,string text,int row){Label l=new Label();l.Text=text;l.AutoSize=true;l.MaximumSize=new Size(690,0);p.Controls.Add(l,1,row);}
+    static Button ButtonAt(Control parent,string text,Action action){Button b=new Button();b.Text=text;b.AutoSize=true;b.Height=34;b.MinimumSize=new Size(125,34);b.Margin=new Padding(4);b.Click+=delegate{action();};parent.Controls.Add(b);return b;}
+    static void Field(TableLayoutPanel panel,string caption,TextBox box,int row){Label l=new Label();l.Text=caption;l.AutoSize=true;l.Margin=new Padding(4,10,4,10);box.Dock=DockStyle.Fill;box.Margin=new Padding(4,6,4,6);panel.Controls.Add(l,0,row);panel.Controls.Add(box,1,row);}
+    Control PathRow(string label,TextBox box,Action action){TableLayoutPanel p=new TableLayoutPanel();p.Dock=DockStyle.Fill;p.ColumnCount=2;p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,165));p.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));ButtonAt(p,label,action);box.Dock=DockStyle.Fill;box.Margin=new Padding(4,7,4,4);box.ReadOnly=true;p.Controls.Add(box,1,0);return p;}
+    static void Grid(DataGridView g){g.Dock=DockStyle.Fill;g.AllowUserToAddRows=false;g.AllowUserToDeleteRows=false;g.ReadOnly=true;g.RowHeadersVisible=false;g.SelectionMode=DataGridViewSelectionMode.FullRowSelect;g.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;g.BackgroundColor=Color.White;}
     void ShowMain(){Show();WindowState=FormWindowState.Normal;Activate();}
-    void OpenOutput(){if(!String.IsNullOrEmpty(lastOutput)&&Directory.Exists(lastOutput))Process.Start("explorer.exe",QuoteArg(lastOutput));}
-    void MakeRow(TextBox box,Button button,string text,int y){button.Text=text;button.SetBounds(30,y-2,140,36);Controls.Add(button);box.SetBounds(185,y,625,32);box.ReadOnly=true;box.RightToLeft=RightToLeft.No;Controls.Add(box);}
-    void AddLog(string s){if(InvokeRequired){BeginInvoke(new Action<string>(AddLog),s);return;}log.AppendText("["+DateTime.Now.ToString("HH:mm:ss")+"] "+s+Environment.NewLine);}
-    void Busy(bool value){busy=value;foreach(Control c in new Control[]{chooseReport,chooseTemplate,chooseOutput,build,title,cover})c.Enabled=!value;progress.Style=value?ProgressBarStyle.Marquee:ProgressBarStyle.Blocks;progress.MarqueeAnimationSpeed=value?30:0;}
-    static string QuoteArg(string s){return "\""+s+"\"";}
-    void StartBuild(){
-        if(!File.Exists(report.Text)||!File.Exists(template.Text)){MessageBox.Show(this,"Select a report and a template.");return;}
-        if(String.IsNullOrWhiteSpace(title.Text)){MessageBox.Show(this,"Enter a report title.");return;}
-        string engine=Path.Combine(root,"Layout-Report.jsx");if(!File.Exists(engine)){MessageBox.Show(this,"Layout-Report.jsx is missing. Run Start.vbs from the complete extracted package.");return;}
-        string folder;
-        try{folder=Path.Combine(output.Text,"Report-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,6));Directory.CreateDirectory(folder);}catch(Exception ex){MessageBox.Show(this,ex.Message);return;}
-        Dictionary<string,object> cfg=new Dictionary<string,object>();cfg["report"]=report.Text;cfg["template"]=template.Text;cfg["title"]=title.Text;cfg["output"]=folder;cfg["cover"]=cover.Checked;
-        string config=new JavaScriptSerializer().Serialize(cfg);
-        try{File.WriteAllText(Path.Combine(folder,"job-config.json"),config,new UTF8Encoding(false));}catch(Exception ex){MessageBox.Show(this,ex.Message);return;}
-        lastOutput=folder;openOutput.Enabled=false;Busy(true);AddLog("Connecting to InDesign. Please leave its documents unchanged until the build finishes.");
-        Thread worker=new Thread(delegate(){RunJob(engine,config,folder);});worker.SetApartmentState(ApartmentState.STA);worker.IsBackground=true;worker.Start();
+    void OpenPath(string path){try{if(String.IsNullOrWhiteSpace(path)||(!Directory.Exists(path)&&!File.Exists(path)))throw new Exception("This output is not available yet.");Process.Start(new ProcessStartInfo(path){UseShellExecute=true});}catch(Exception e){MessageBox.Show(this,e.Message,"Open output");}}
+    void OpenResult(string name){if(results.SelectedRows.Count==0){MessageBox.Show(this,"Select a result first.");return;}string folder=Convert.ToString(results.SelectedRows[0].Cells[7].Value);OpenPath(String.IsNullOrEmpty(name)?folder:Path.Combine(folder,name));}
+    void UI(Action action){if(IsDisposed||Disposing)return;try{BeginInvoke(action);}catch(InvalidOperationException){}}
+    void AddLog(string s){if(InvokeRequired){UI(delegate{AddLog(s);});return;}log.AppendText("["+DateTime.Now.ToString("HH:mm:ss")+"] "+s+Environment.NewLine);}
+    void Busy(bool value){busy=value;foreach(Control c in locked)c.Enabled=!value;build.Enabled=validate.Enabled=!value;stop.Enabled=value;progress.Style=value?ProgressBarStyle.Marquee:ProgressBarStyle.Blocks;status.Text=value?"Working. Please do not edit InDesign documents during a job.":"Ready";}
+    void RequestStop(){
+        if(!busy)return;stopping=true;stop.Enabled=false;status.Text="Cancelling current job...";AddLog("Cancellation requested. Waiting for InDesign to reach a safe checkpoint.");
+        string path=cancelFile;if(!String.IsNullOrEmpty(path))try{File.WriteAllText(path,"cancel",Encoding.ASCII);}catch(Exception e){AddLog("Could not signal cancellation: "+e.Message);}
+    }
+    List<QueueItem> ReadQueue(){queue.EndEdit();List<QueueItem> items=new List<QueueItem>();foreach(DataGridViewRow row in queue.Rows)items.Add(new QueueItem{Report=Convert.ToString(row.Cells[0].Value),Title=Convert.ToString(row.Cells[1].Value)});return items;}
+    UserSettings Snapshot(){return new UserSettings{Layout=layout,Template=template.Text,Output=output.Text,Subtitle=subtitle.Text,Author=author.Text,Organization=organization.Text,Date=date.Text,Cover=cover.Checked,ContinueOnError=keepGoing.Checked,Repository=repository.Text.Trim(),CheckUpdatesAtStart=updateAtStart.Checked,Reports=ReadQueue()};}
+    void SaveSettings(){try{Validate();SettingsStore.Write(SettingsStore.FileName,Snapshot());}catch(Exception e){AddLog("Settings were not saved: "+e.Message);}}
+    void LoadSettings(){if(!File.Exists(SettingsStore.FileName))return;try{UserSettings s=SettingsStore.Read<UserSettings>(SettingsStore.FileName);if(s==null||s.Layout==null)throw new Exception("Settings are incomplete.");s.Layout.Validate();layout=s.Layout;properties.SelectedObject=layout;if(!String.IsNullOrEmpty(s.Template))template.Text=s.Template;if(!String.IsNullOrEmpty(s.Output))output.Text=s.Output;subtitle.Text=s.Subtitle;author.Text=s.Author;organization.Text=s.Organization;date.Text=s.Date;cover.Checked=s.Cover;keepGoing.Checked=s.ContinueOnError;repository.Text=s.Repository;updateAtStart.Checked=s.CheckUpdatesAtStart;if(s.Reports!=null)foreach(QueueItem q in s.Reports)queue.Rows.Add(q.Report,q.Title);}catch(Exception e){AddLog("Could not load saved settings; defaults are active. "+e.Message);}}
+    void ImportPreset(){try{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="Layout preset (*.json)|*.json";if(d.ShowDialog(this)!=DialogResult.OK)return;LayoutOptions next=SettingsStore.Read<LayoutOptions>(d.FileName);if(next==null)throw new Exception("Empty preset.");next.Validate();layout=next;properties.SelectedObject=layout;AddLog("Preset imported: "+d.FileName);}}catch(Exception e){MessageBox.Show(this,e.Message,"Import preset");}}
+    void ExportPreset(){try{Validate();layout.Validate();using(SaveFileDialog d=new SaveFileDialog()){d.Filter="Layout preset (*.json)|*.json";d.FileName="layout-preset.json";if(d.ShowDialog(this)==DialogResult.OK)SettingsStore.Write(d.FileName,layout);}}catch(Exception e){MessageBox.Show(this,e.Message,"Export preset");}}
+    void ChooseColor(){GridItem item=properties.SelectedGridItem;if(item==null||item.PropertyDescriptor==null||(item.PropertyDescriptor.Name!="AccentColor"&&item.PropertyDescriptor.Name!="TableColor")){MessageBox.Show(this,"Select Heading color or Table color first.");return;}using(ColorDialog d=new ColorDialog()){if(d.ShowDialog(this)==DialogResult.OK){item.PropertyDescriptor.SetValue(layout,"#"+d.Color.R.ToString("X2")+d.Color.G.ToString("X2")+d.Color.B.ToString("X2"));properties.Refresh();}}}
+    void StartWork(bool validationOnly){
+        if(placeholderEdition){layout.ImportInlineImages=true;layout.ReplaceImagesWithPlaceholders=true;properties.Refresh();}
+        UserSettings s;try{Validate();layout.Validate();s=Snapshot();if(!File.Exists(s.Template))throw new Exception("Select an existing InDesign template.");if(String.IsNullOrWhiteSpace(s.Output))throw new Exception("Select an output folder.");if(!validationOnly){if(s.Reports.Count==0)throw new Exception("Select one or more DOCX reports.");foreach(QueueItem q in s.Reports){if(!File.Exists(q.Report)||!q.Report.EndsWith(".docx",StringComparison.OrdinalIgnoreCase))throw new Exception("Missing DOCX report: "+q.Report);if(String.IsNullOrWhiteSpace(q.Title))throw new Exception("Enter a title for every report.");}}if(!File.Exists(Path.Combine(root,"Layout-Report.jsx")))throw new Exception("Layout-Report.jsx is missing.");}
+        catch(Exception e){MessageBox.Show(this,e.Message,"Check settings");return;}
+        SaveSettings();stopping=false;Busy(true);results.Rows.Clear();Thread worker=new Thread(delegate(){RunQueue(s,validationOnly);});worker.SetApartmentState(ApartmentState.STA);worker.IsBackground=true;worker.Start();
     }
     object Connect(){
         List<string> ids=new List<string>();ids.Add("InDesign.Application.2026");ids.Add("InDesign.Application");
-        using(RegistryKey classes=RegistryKey.OpenBaseKey(RegistryHive.ClassesRoot,RegistryView.Registry64)){
-            foreach(string key in classes.GetSubKeyNames())if(key.StartsWith("InDesign.Application.",StringComparison.OrdinalIgnoreCase)&&!ids.Contains(key))ids.Add(key);
-        }
-        Exception last=null;
-        foreach(string id in ids){
-            try{object running=Marshal.GetActiveObject(id);if(running!=null){AddLog("Connected to "+id);return running;}}catch{}
-            try{Type t=Type.GetTypeFromProgID(id,false);if(t!=null){object a=Activator.CreateInstance(t);AddLog("Starting "+id);return a;}}catch(Exception ex){last=ex;}
-        }
-        throw new Exception("Could not connect to InDesign. Open InDesign and try again, or run Layout-Report.jsx directly from its Scripts panel."+(last==null?"":"\r\n"+last.Message));
+        try{using(RegistryKey classes=RegistryKey.OpenBaseKey(RegistryHive.ClassesRoot,RegistryView.Registry64)){foreach(string key in classes.GetSubKeyNames())if(key.StartsWith("InDesign.Application.",StringComparison.OrdinalIgnoreCase)&&!ids.Contains(key))ids.Add(key);}}catch(Exception e){AddLog("Registry discovery: "+e.Message);}
+        Exception last=null;foreach(string id in ids){try{object running=Marshal.GetActiveObject(id);if(running!=null)return running;}catch{}try{Type t=Type.GetTypeFromProgID(id,false);if(t!=null)return Activator.CreateInstance(t);}catch(Exception ex){last=ex;}}
+        throw new Exception("Could not connect to InDesign. Open InDesign and try again.",last);
     }
-    void RunJob(string engine,string config,string folder){
-        object app=null;bool success=false;string completedWarnings="";
+    static string Get(Dictionary<string,object> r,string key){object value;return r!=null&&r.TryGetValue(key,out value)?Convert.ToString(value):"";}
+    static string[] Strings(Dictionary<string,object> r,string key){object v;if(!r.TryGetValue(key,out v))return new string[0];System.Collections.IEnumerable items=v as System.Collections.IEnumerable;List<string> names=new List<string>();if(items!=null)foreach(object item in items)names.Add(Convert.ToString(item));return names.ToArray();}
+    void RunQueue(UserSettings s,bool validationOnly){
+        object app=null;int passed=0,failed=0;bool warned=false;List<Dictionary<string,object>> summary=new List<Dictionary<string,object>>();string runRoot=null;
         try{
-            app=Connect();string source=File.ReadAllText(engine,Encoding.UTF8);
-            source=System.Text.RegularExpressions.Regex.Replace(source,@"(?m)^\s*#target[^\r\n]*","");
-            string code="var REPORT_CONFIG = "+config+";\r\n"+source;
-            app.GetType().InvokeMember("DoScript",BindingFlags.InvokeMethod|BindingFlags.OptionalParamBinding,null,app,new object[]{code,1246973031});
-            string status=Path.Combine(folder,"result.json");if(!File.Exists(status))throw new Exception("InDesign did not record a result. Check its window and report-log.txt.");
-            var result=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(File.ReadAllText(status,Encoding.UTF8));
-            success=result.ContainsKey("ok")&&Convert.ToBoolean(result["ok"]);
-            if(!success)throw new Exception(Convert.ToString(result["message"]));
-            foreach(string f in new string[]{"Report.indd","Report.idml","Report.pdf"})if(!File.Exists(Path.Combine(folder,f))||new FileInfo(Path.Combine(folder,f)).Length==0)throw new Exception("Missing or empty output: "+f);
-            AddLog("Report built. Pages: "+result["pages"]);
-            string warnings=Convert.ToString(result["warnings"]);completedWarnings=warnings;if(!String.IsNullOrEmpty(warnings))AddLog("Warnings: "+warnings);
-            AddLog("INDD, IDML and PDF have been saved to the output folder.");
-        }catch(Exception ex){
-            success=false;Exception actual=ex;while(actual.InnerException!=null)actual=actual.InnerException;
-            AddLog("Report build failed: "+actual.Message);
-            try{File.WriteAllText(Path.Combine(folder,"windows-error.txt"),ex.ToString(),Encoding.UTF8);}catch{}
-            string details=Path.Combine(folder,"report-log.txt");if(File.Exists(details))AddLog(File.ReadAllText(details,Encoding.UTF8));
-            AddLog("Send report-log.txt and windows-error.txt for troubleshooting.");
-        }finally{
-            if(app!=null&&Marshal.IsComObject(app))Marshal.ReleaseComObject(app);
-            BeginInvoke(new Action(delegate{
-                Busy(false);openOutput.Enabled=true;
-                if(success){
-                    string message="Your report was created successfully.\r\nINDD, IDML and PDF are ready.\r\n\r\n"+folder;
-                    if(!String.IsNullOrEmpty(completedWarnings))message+="\r\n\r\nWarnings were recorded. Please review report-log.txt.";
-                    tray.ShowBalloonTip(6000,"Report created successfully","Your INDD, IDML and PDF files are ready.",ToolTipIcon.Info);
-                    ShowMain();MessageBox.Show(this,message,"Report Created Successfully",MessageBoxButtons.OK,MessageBoxIcon.Information);
-                }
-            }));
+            runRoot=Path.Combine(s.Output,"Run-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,8));Directory.CreateDirectory(runRoot);lastOutput=runRoot;
+            app=Connect();string source=Regex.Replace(File.ReadAllText(Path.Combine(root,"Layout-Report.jsx"),Encoding.UTF8),@"(?m)^\s*#target[^\r\n]*","");
+            List<QueueItem> work=validationOnly?new List<QueueItem>{new QueueItem{Title="Template validation"}}:s.Reports;
+            for(int i=0;i<work.Count;i++){
+                if(stopping)break;QueueItem q=work[i];string folder=Path.Combine(runRoot,(i+1).ToString("D3"));Directory.CreateDirectory(folder);cancelFile=Path.Combine(folder,"cancel.request");if(File.Exists(cancelFile))File.Delete(cancelFile);
+                Dictionary<string,object> r=null;bool ok=false;string error="";
+                try{
+                    AddLog((i+1)+" / "+work.Count+": "+q.Title);
+                    Dictionary<string,object> cfg=new Dictionary<string,object>{{"report",q.Report},{"template",s.Template},{"title",q.Title},{"output",folder},{"cancelFile",cancelFile},{"cover",s.Cover},{"subtitle",s.Subtitle},{"author",s.Author},{"organization",s.Organization},{"date",s.Date},{"layout",s.Layout},{"mode",validationOnly?"validate":"build"},{"closeAfterBuild",work.Count>1}};
+                    string json=SettingsStore.Serialize(cfg);File.WriteAllText(Path.Combine(folder,"job-config.json"),json,new UTF8Encoding(false));SettingsStore.Write(Path.Combine(folder,"layout-preset.json"),s.Layout);
+                    app.GetType().InvokeMember("DoScript",BindingFlags.InvokeMethod|BindingFlags.OptionalParamBinding,null,app,new object[]{"var REPORT_CONFIG = "+json+";\r\n"+source,1246973031});
+                    string path=Path.Combine(folder,"result.json");if(!File.Exists(path))throw new Exception("InDesign did not record result.json.");r=SettingsStore.Read<Dictionary<string,object>>(path);
+                    if(Get(r,"ok").ToLowerInvariant()!="true")throw new Exception(Get(r,"message"));
+                    if(!validationOnly)foreach(string f in new string[]{"Report.indd","Report.idml","Report.pdf"})if(!File.Exists(Path.Combine(folder,f))||new FileInfo(Path.Combine(folder,f)).Length==0)throw new Exception("Missing or empty output: "+f);
+                    ok=true;passed++;if(!String.IsNullOrEmpty(Get(r,"warnings")))warned=true;
+                }catch(Exception e){failed++;Exception actual=e;while(actual.InnerException!=null)actual=actual.InnerException;error=actual.Message;AddLog("Failed: "+error);File.WriteAllText(Path.Combine(folder,"windows-error.txt"),e.ToString());if(File.Exists(Path.Combine(folder,"result.json")))try{r=SettingsStore.Read<Dictionary<string,object>>(Path.Combine(folder,"result.json"));}catch{} }
+                summary.Add(new Dictionary<string,object>{{"title",q.Title},{"ok",ok},{"folder",folder},{"error",error},{"result",r}});SettingsStore.Write(Path.Combine(runRoot,"batch-summary.json"),summary);
+                if(File.Exists(Path.Combine(folder,"report-log.txt")))AddLog(File.ReadAllText(Path.Combine(folder,"report-log.txt")));
+                Dictionary<string,object> current=r;string outcome=ok?(validationOnly?"Validated":"Completed"):"Failed";string label=q.Title;string savedFolder=folder;string currentError=error;
+                UI(delegate{results.Rows.Add(label,outcome,Get(current,"pages"),Get(current,"tables"),Get(current,"headings"),Get(current,"missingFonts"),Get(current,"warnings")+currentError,savedFolder);if(current!=null){string[] pdfs=Strings(current,"pdfPresets");if(pdfs.Length>0){List<string> names=new List<string>();names.Add("Application settings");names.AddRange(pdfs);PdfNames.Names=names.ToArray();}string[] fonts=Strings(current,"availableFonts");if(fonts.Length>0)FontNames.Names=fonts;properties.Refresh();}});
+                if(!ok&&!s.ContinueOnError)break;
+            }
+        }catch(Exception e){failed++;AddLog("Run stopped: "+e.Message);if(runRoot!=null){try{File.WriteAllText(Path.Combine(runRoot,"windows-error.txt"),e.ToString());}catch(Exception logError){AddLog("Could not save run diagnostics: "+logError.Message);}}}
+        finally{
+            cancelFile=null;if(app!=null&&Marshal.IsComObject(app))Marshal.ReleaseComObject(app);
+            int succeeded=passed,errors=failed;bool hasWarnings=warned;int requested=validationOnly?1:s.Reports.Count;
+            UI(delegate{Busy(false);tabs.SelectedIndex=3;ShowMain();string msg="Completed: "+succeeded+" | Failed: "+errors+" | Not processed: "+Math.Max(0,requested-succeeded-errors);status.Text=msg;bool all=succeeded==requested&&errors==0;string caption=all?(validationOnly?"Template Validated":"Reports Created Successfully"):"Run Finished - Review Required";if(hasWarnings)msg+="\r\nWarnings were recorded. Review the Results tab and logs.";tray.ShowBalloonTip(6000,caption,msg,all?ToolTipIcon.Info:ToolTipIcon.Warning);MessageBox.Show(this,msg+"\r\n\r\n"+runRoot,caption,MessageBoxButtons.OK,all?MessageBoxIcon.Information:MessageBoxIcon.Warning);});
         }
+    }
+    void CheckUpdates(bool automatic){
+        if(checkingUpdate)return;string repo=repository.Text.Trim();if(!Regex.IsMatch(repo,@"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")){if(!automatic)MessageBox.Show(this,"Enter a repository as owner/name.");return;}
+        checkingUpdate=true;update.Enabled=false;AddLog("Checking latest published GitHub release...");Thread worker=new Thread(delegate(){
+            string message="",url=null;
+            try{
+                string json;try{ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;HttpWebRequest request=(HttpWebRequest)WebRequest.Create("https://api.github.com/repos/"+repo+"/releases/latest");request.UserAgent="ReportLayout/"+VersionLabel;request.Accept="application/vnd.github+json";request.Timeout=15000;request.ReadWriteTimeout=15000;using(WebResponse response=request.GetResponse())using(StreamReader reader=new StreamReader(response.GetResponseStream()))json=reader.ReadToEnd();}catch(WebException){json=ReadReleaseWithGh(repo);}
+                Dictionary<string,object> release=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(json);string tag=Get(release,"tag_name");if(IsNewerRelease(tag,VersionLabel)){url="https://github.com/"+repo+"/releases/latest";message="A newer release is available: "+tag+".\r\nOpen its release page?";}else message="No newer stable release was found. Current version: "+VersionLabel;
+            }catch(Exception e){message="Update check could not complete. Check the repository, network, published release and (for private repositories) gh auth login.\r\n"+e.Message;}
+            string finalMessage=message,finalUrl=url;UI(delegate{checkingUpdate=false;update.Enabled=true;AddLog(finalMessage);if(finalUrl!=null){if(MessageBox.Show(this,finalMessage,"Update available",MessageBoxButtons.YesNo,MessageBoxIcon.Information)==DialogResult.Yes)Process.Start(new ProcessStartInfo(finalUrl){UseShellExecute=true});}else if(!automatic)MessageBox.Show(this,finalMessage,"Check for Updates");});
+        });worker.IsBackground=true;worker.Start();
+    }
+    public static bool IsNewerRelease(string tag,string current){Match remote=Regex.Match(tag??"",@"^v?(\d+\.\d+\.\d+)(?:-([0-9A-Za-z.-]+))?$");Match local=Regex.Match(current,@"^v?(\d+\.\d+\.\d+)(?:-([0-9A-Za-z.-]+))?$");if(!remote.Success||!local.Success)throw new Exception("Unsupported release version label.");int comparison=new Version(remote.Groups[1].Value).CompareTo(new Version(local.Groups[1].Value));return comparison>0||(comparison==0&&!remote.Groups[2].Success&&local.Groups[2].Success);}
+    static string ReadReleaseWithGh(string repo){
+        ProcessStartInfo start=new ProcessStartInfo("gh","api repos/"+repo+"/releases/latest");start.UseShellExecute=false;start.CreateNoWindow=true;start.RedirectStandardOutput=true;start.RedirectStandardError=true;start.StandardOutputEncoding=Encoding.UTF8;start.EnvironmentVariables["GH_PROMPT_DISABLED"]="1";
+        using(Process p=new Process()){p.StartInfo=start;StringBuilder content=new StringBuilder();p.OutputDataReceived+=delegate(object sender,DataReceivedEventArgs e){if(e.Data!=null)content.AppendLine(e.Data);};p.ErrorDataReceived+=delegate{};p.Start();p.BeginOutputReadLine();p.BeginErrorReadLine();if(!p.WaitForExit(20000)){p.Kill();throw new Exception("GitHub CLI timed out.");}p.WaitForExit();if(p.ExitCode!=0)throw new Exception("GitHub CLI could not read the release.");return content.ToString();}
     }
 }

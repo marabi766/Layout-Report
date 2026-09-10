@@ -6,11 +6,25 @@
 
 Report Layout is a Windows desktop utility that converts Microsoft Word reports into editable Adobe InDesign documents. Its English WinForms interface drives an InDesign ExtendScript engine that imports DOCX content, applies Persian typography, flows long text across pages, formats editable tables, validates content, and exports INDD, IDML, and PDF files.
 
-**Current release:** `v1.1.1` · **Target:** Windows 10/11 and Adobe InDesign 21.3
+**Current preview:** `v2.0.0-preview.1` · **Last user-tested version:** `v1.1.1` · **Target:** Windows 10/11 and Adobe InDesign 21.3
+
+This preview adds all ten planned feature groups. Portable tests pass, including an InDesign-DOM simulation. Windows compilation and real InDesign execution of the new features have **not** been run in the development environment. Keep v1.1.1 until the [acceptance checklist](docs/TESTING.md) is complete.
 
 ## Features
 
-- Simple **Select Report**, **Select Template**, and **Build Report** workflow
+- **Select Reports**, **Select Template**, and **Build Reports**, with editable per-report titles
+- Four built-in presets: Economic Report, Book Summary, Research Report, Compact Report
+- Editable layout settings, color picker, installed-font dropdowns, JSON preset import/export
+- Editable heading-number separator (default `-`, for example `11-2`) and explicit per-report titles
+- Word images set to **In Line with Text**, with proportional sizing and configurable frame-relative width/height limits
+- Installed PDF presets, including custom names, loaded by Validate Template
+- Template validation before every import; separate read-only validation action
+- Sequential batch queue, continue-on-error option, and cooperative cancellation of the current report
+- Optional editable table of contents with Heading 1/2 and stabilized page numbers
+- Cover title, subtitle, author, organization and date; PDF title/author metadata
+- Results table with pages, tables, headings, missing fonts, warnings and output buttons
+- Local preferences and last queue restored on startup
+- Manual or opt-in startup update checks; public GitHub API and authenticated `gh` fallback
 - Editable INDD and IDML output plus a review PDF
 - Automatic page creation and threaded text flow
 - Persian right-to-left formatting with Word `Heading 1` and `Heading 2` mapping
@@ -49,23 +63,46 @@ Microsoft Word, Python, Node.js, and a separate installer are not required on th
 
 ## Installation
 
-1. Download `Report-Layout-Windows-v1.1.1.zip` from the latest Release.
+1. Download `Report-Layout-Windows-v2.0.0-preview.1.zip`.
 2. Extract the complete ZIP to a writable folder.
 3. Close older Report Layout instances, including the tray icon.
 4. Double-click `Start.vbs`; use `Start.cmd` if VBScript is unavailable.
-5. The launcher installs under `%LOCALAPPDATA%\ReportLayout`, compiles the EXE locally, and creates current-user Desktop and Start Menu shortcuts.
+5. The launcher installs under `%LOCALAPPDATA%\ReportLayoutPreview`, compiles all `src/*.cs` files locally, and creates **Report Layout Preview** Desktop and Start Menu shortcuts. The stable v1.1.1 installation is left intact.
 6. Use either shortcut for later launches.
+
+For the separate image-placeholder edition, close the regular Report Layout window (including its tray icon) and double-click `Start-Placeholders.vbs`. This launcher uses the portable build in `bin`, stores its preferences separately, forces inline-image import, and replaces every imported image with an empty bordered frame carrying an internal `REPORT_IMAGE_PLACEHOLDER_n` label for later manual placement.
 
 The package contains source instead of a precompiled EXE. Windows compiles it locally using installed .NET Framework components.
 
 ## Usage
 
-1. Click **Select Report** and choose a `.docx` file.
+1. On **Reports**, click **Select Reports** and choose one or more `.docx` files.
 2. Keep the bundled template or select an `.idml`, `.indd`, or `.indt` template.
-3. Enter a report title; Persian titles are supported.
-4. Select the output folder and choose whether to add a cover page.
-5. Click **Build Report** and leave InDesign documents unchanged until completion.
-6. After the success message, click **Open Output Folder**.
+3. Edit each title in the queue; Persian titles are supported. Select the output folder.
+4. On **Layout Settings**, apply a preset, then edit individual properties. Use **Choose Color** with the heading/table color selected. To reuse a layout, export/import `layout-preset.json`.
+5. On **Cover & Details**, enable/disable the cover and enter subtitle, author, organization and date.
+6. Click **Validate Template**. It opens a copy, checks the parent, header, margins, required selected fonts and PDF preset, then closes the copy without saving. It also loads installed PDF preset names without scanning every InDesign font.
+7. Select each report row and use **Set Selected Title** (or edit its Title cell directly). A title is required and is used for the cover, running header, metadata and Results row.
+8. Click **Build Reports** and leave InDesign documents unchanged until completion. Jobs run sequentially. **Cancel Current Job** requests cancellation at the next safe engine checkpoint, closes the working copy and does not start remaining reports.
+8. On **Results**, select a row and use **Open PDF**, **Open INDD**, **Open Folder** or **View Details**. A failed report retains diagnostics; remaining reports follow the continue-on-error option.
+
+### Layout settings and templates
+
+The property grid exposes fonts, type sizes, line/paragraph spacing, heading/table colors, margins, cell padding, borders, header repetition, cover title size, contents options and PDF preset. Sizes are in points; custom margins are in millimetres. Font names use `family<TAB>style`, not a font filename. Validation resolves only the configured fonts to avoid slow or stalled full-library enumeration.
+
+Margin source **Legacy** preserves the previously approved body geometry for `D1-Main Body`. **Template** uses first-page margins; **Custom** uses four explicit values. A blank Parent page name prefers the bundled `D1-Main Body`, falling back to the first page's applied parent. Enter a parent name to require that exact parent.
+
+The border, footer, logo and page-number art remain controlled by the parent in the IDML template. Report text/table formatting comes from the layout settings and overrides matching report paragraph styles on the opened copy. Headings 2-9 still map to the second visual level. Inline images can either be retained and resized or replaced with empty frames by the placeholder edition.
+
+### Table of contents
+
+Enable **Generate table of contents** in Layout Settings. Entries come from Word heading styles, not merely large/bold text. The editable contents is inserted after the cover (or before the body without a cover). Page numbers are recomputed until pagination stabilizes. It is a generated text story, not a native live InDesign TOC or a set of hyperlinks. After manually changing pagination in InDesign, regenerate the report to refresh it. No matching headings is a clear error rather than an empty contents page.
+
+### Preferences and updates
+
+Settings are stored in `%LOCALAPPDATA%\ReportLayoutData\settings.json`, separate from program files. Closing the idle app saves layout, queue paths/titles, template/output, cover details and update preferences. **Save Preferences** saves immediately. Exported layout presets contain formatting only, not report paths or personal metadata.
+
+Update checks are off at startup by default. **Check for Updates** reads the latest stable published release, not arbitrary tags or preview releases. For private repositories, configure GitHub CLI with `gh auth login`; no token is read or stored by this app. The app offers to open a release page and never downloads/runs an update automatically. No report content is sent to GitHub. Network/permission/no-release failures are reported separately from successful checks.
 
 Minimizing hides the application in the system tray. Double-click the tray icon to restore it; use **Exit** in the tray menu to close it.
 
@@ -79,10 +116,14 @@ Minimizing hides the application in the system tray. Double-click the tray icon 
 | `report-log.txt` | InDesign stages and warnings |
 | `result.json` | Machine-readable result |
 | `job-config.json` | Inputs and options for the run |
+| `layout-preset.json` | Exact effective formatting settings sent by the UI |
+| `batch-summary.json` | Per-job outcomes and folders, at the run root |
 | `windows-error.txt` | Windows-side error details, on failure |
 | `Review-Needed.indd` | Recoverable diagnostic document, when possible |
 
 Success appears only after InDesign reports success and INDD, IDML, and PDF all exist with nonzero size.
+
+Each run has a unique `Run-...` folder containing numbered job folders (`001`, `002`, ...). Validate Template also writes a result/log folder, but does not produce report documents. Results count missing document fonts as warnings after import; required selected fonts are blocking errors. This validation is not the full Adobe Preflight engine.
 
 ## Preparing Word
 
@@ -92,6 +133,12 @@ Success appears only after InDesign reports success and INDD, IDML, and PDF all 
 - Keep tables structurally simple.
 
 Manual font sizing does not replace Word heading styles. Inline bold in ordinary paragraphs is preserved. Complex Word objects, nested tables, formulas, text boxes, tracked changes, and elaborate notes may need manual review.
+
+### Word images
+
+Set supported images to **In Line with Text** in Word. Under **Layout Settings > Images**, enable image import and choose maximum width and height percentages relative to the report text frame. Oversized inline images are reduced proportionally, remain anchored with their source paragraph, and participate in the normal overflow/page-flow checks. Smaller images are never enlarged. Floating Word images are not repositioned automatically and are reported as warnings; convert them to In Line with Text for predictable output.
+
+The **Replace images with placeholders** option removes each imported graphic but preserves its proportionally constrained anchored frame. The dedicated `Start-Placeholders.vbs` launcher always enables this option and uses a separate settings profile.
 
 ## Preparing another InDesign template
 
@@ -127,9 +174,11 @@ The bundled workflow uses IRNazanin for body text and Modam for headings, a Worl
 | Component | Role |
 | --- | --- |
 | `src/ReportLayout.cs` | WinForms UI, tray, COM bridge, validation, notifications |
+| `src/Settings.cs` | Property-grid schema, presets, validation, persistence |
 | `Layout-Report.jsx` | Import, typography, page flow, tables, checks, exports |
 | `Build-and-Run.ps1` | Per-user installation, compilation, icon, shortcuts |
-| `Start.vbs` / `Start.cmd` | Quiet and fallback launchers |
+| `Start.vbs` / `Start.cmd` | Regular quiet and fallback launchers |
+| `Start-Placeholders.vbs` / `Start-Placeholders.cmd` | Separate empty-image-frame edition |
 | `assets/Template.idml` | Bundled baseline template |
 | `assets/ReportLayout.ico` | Multi-size Windows icon |
 | `tests/flow-tests.cjs` | Portable engine regression tests |
@@ -142,9 +191,13 @@ Run portable engine tests with:
 
 ```powershell
 node tests/flow-tests.cjs
+node tests/options-tests.cjs
+node tests/engine-tests.cjs
 ```
 
 These tests do not replace Windows and InDesign acceptance testing.
+
+On Windows, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\Windows-Tests.ps1` to compile and test settings without launching the UI or creating shortcuts. GitHub Actions contains this Windows job; it has not been run from this workspace.
 
 ## One-command GitHub publishing
 
@@ -154,11 +207,17 @@ On Windows, install [GitHub CLI](https://cli.github.com/) and run:
 .\Publish-To-GitHub.ps1
 ```
 
-The script signs in when needed, creates a private `report-layout` repository, pushes `main` and the selected version tag, builds the Windows ZIP and checksum, and publishes the GitHub Release. To publish publicly, use:
+Run publishing only inside a real Git checkout with committed changes. The source ZIP does not contain `.git`; copy updated files into your existing checkout, retaining `.git`, then commit first. The script creates a private repository if needed, pushes `main` and the selected tag, packages source/runtime files and publishes a release. Versions with a hyphen are published as prereleases. Existing tags are never moved and existing releases are never overwritten. To publish publicly, use:
 
 ```powershell
 .\Publish-To-GitHub.ps1 -Visibility public
 ```
+
+## API references
+
+- [Adobe Document export API](https://developer.adobe.com/indesign/uxp/dom/api/d/document/): PDF export accepts an installed PDFExportPreset.
+- [Adobe Application API](https://developer.adobe.com/indesign/uxp/dom/api/a/application/): application PDF preferences and preset collection.
+- [GitHub release API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release): published stable-release metadata for update checks.
 
 ## Asset and font notice
 

@@ -13,4 +13,14 @@ jobs:
         with:
           node-version: 20
       - name: Run flow tests
-        run: node tests/flow-tests.cjs
+        run: |
+          node tests/flow-tests.cjs
+          node tests/options-tests.cjs
+          node tests/engine-tests.cjs
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile WinForms and test settings
+        shell: powershell
+        run: .\tests\Windows-Tests.ps1

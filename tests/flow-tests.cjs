@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const src=fs.readFileSync(require('path').join(__dirname,'..','Layout-Report.jsx'),'utf8').replace(/^#target.*$/m,'');
 const ctx={REPORT_TEST_MODE:{}};vm.createContext(ctx);vm.runInContext(src,ctx);const h=ctx.REPORT_TEST_MODE;
-assert.equal(h.headingLevel('Heading 1'),1);assert.equal(h.headingLevel('Heading2'),2);assert.equal(h.headingLevel('Normal'),0);assert.equal(h.headingLevel('Body Stayles:Body Text'),0);
+assert.equal(h.headingLevel('Heading 1'),1);assert.equal(h.headingLevel('Heading2'),2);assert.equal(h.headingLevel('Heading 3'),3);assert.equal(h.headingLevel('Heading 4'),0);assert.equal(h.headingLevel('Normal'),0);assert.equal(h.headingLevel('Body Stayles:Body Text'),0);
 let story={overflows:true},frames=[{insertionPoints:{'-1':{index:100}}}],step=0;
 let last=h.flow(story,frames[0],()=>{let f={insertionPoints:{'-1':{index:0}}};frames.push(f);return f;},()=>{if(step>0)frames.at(-1).insertionPoints[-1].index=100+step*100;story.overflows=step<3;step++;},20);
 assert.equal(frames.length,4);assert.strictEqual(last,frames.at(-1));assert.strictEqual(frames[0].nextTextFrame,frames[1]);
@@ -28,6 +28,14 @@ assert.equal(h.headingGap('۲)\u2003\u00a0 عنوان\r').expected,'۲) عنوا
 assert.equal(h.headingGap('۳) عنوان\r').expected,'۳) عنوان\r');
 assert.equal(h.headingGap('عنوان (توضیح) متن\r'),null);
 console.log('PASS: heading separator becomes one space; heading prose untouched.');
+
+assert.equal(h.headingNumbering('11,2)\tHeading\r','-').expected,'11-2) Heading\r');
+assert.equal(h.headingNumbering('۱۱،۲) عنوان\r','-').expected,'۱۱-۲) عنوان\r');
+assert.equal(h.headingNumbering('11-2) Heading\r','.').expected,'11.2) Heading\r');
+assert.equal(h.headingNumbering('عنوان 11,2 متن\r','-'),null);
+console.log('PASS: editable heading-number separator normalizes Latin and Persian numbered headings.');
+assert.equal(h.listKind('• مورد اول\r'),'bullet');assert.equal(h.listKind('۱) مورد اول\r'),'number');assert.equal(h.listKind('متن عادی\r'),'');
+console.log('PASS: bullet and numbered body paragraphs are detected without classifying ordinary prose.');
 
 const oversetCell={id:3,contents:'',texts:{item:()=>({contents:'مفهوم'})},characters:{length:5}};
 assert.equal(h.readCellText(oversetCell),'مفهوم');

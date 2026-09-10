@@ -1,0 +1,28 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const src=fs.readFileSync(path.join(__dirname,'../Layout-Report.jsx'),'utf8').replace(/^#target.*$/m,'');
+const ctx={REPORT_TEST_MODE:{}};vm.createContext(ctx);vm.runInContext(src,ctx);const h=ctx.REPORT_TEST_MODE;
+const clean=x=>JSON.parse(JSON.stringify(x));
+const defaults=h.layoutOptions();assert.equal(defaults.BodySize,13);assert.equal(defaults.SchemaVersion,1);assert.equal(defaults.TocEnabled,false);assert.equal(defaults.HeadingNumberSeparator,'-');
+assert.equal(h.layoutOptions({BodySize:14,BodyLeading:21}).BodySize,14);
+for(const bad of [{BodySize:0},{BodySize:13,BodyLeading:12},{H3Size:12,H3Leading:10},{BodySize:NaN},{BodySize:Infinity},{BodySize:'13'},{SchemaVersion:2},{AccentColor:'red'},{TableColor:'#zzzzzz'},{Margins:3},{Margins:'Custom'},{Alignment:2},{HeaderAlignment:3},{CellVerticalAlignment:3},{BulletIndent:-1},{NumberedIndent:101},{ImageMaxWidthPercent:9},{ImageMaxHeightPercent:101},{CellPadding:-1},{MarginLeft:200},{TocEnabled:true,TocTitle:''},{BodyFont:'Font.ttf'},{Heading3Font:'Font.ttf'},{BodyAfter:-1},{PdfPreset:''},{HeadingNumberSeparator:''},{HeadingNumberSeparator:'--'},{HeadingNumberSeparator:'2'},{Unknown:1},{TocEnabled:'true'}]) assert.throws(()=>h.layoutOptions(bad),JSON.stringify(bad));
+assert.deepEqual(clean(h.hexColor('#154F9E')),[21,79,158]);
+let b=h.bodyBounds(defaults,595,842,{top:20,left:30,bottom:40,right:50},'D1-Main Body');assert.equal(b[0],85.03937);assert.equal(b[1],99.2126);
+assert.deepEqual(clean(h.bodyBounds(h.layoutOptions({Margins:1}),595,842,{top:20,left:30,bottom:40,right:50},'D1-Main Body')),[20,30,802,545]);
+b=h.bodyBounds(h.layoutOptions({Margins:2,MarginTop:25.4,MarginLeft:25.4,MarginBottom:25.4,MarginRight:25.4}),595,842,{},'x');assert.deepEqual(clean(b),[72,72,770,523]);
+assert.throws(()=>h.bodyBounds(h.layoutOptions({Margins:2,MarginLeft:150,MarginRight:150}),595,842,{},'x'),/insufficient/);
+assert.throws(()=>h.bodyBounds(h.layoutOptions({Margins:1}),595,842,{top:-1,left:20,bottom:20,right:20},'x'),/Invalid/);
+const withControls='\x00\b\t\n\r"\\\u2028\u2029 فارسی';assert.equal(JSON.parse(h.json(withControls)),withControls);
+assert.equal(h.contentsText('فهرست',[{text:'1) Heading\r',page:'3'}]),'فهرست\r1) Heading  —  3');
+assert.throws(()=>h.contentsText('Contents',[{text:'A',page:null}]),/resolve/);
+assert.equal(h.contentsText('Contents',[]),'Contents');
+// Reject missing, renamed or disconnected settings in the C# / engine contract.
+const settings=fs.readFileSync(path.join(__dirname,'../src/Settings.cs'),'utf8');
+const classPart=settings.slice(settings.indexOf('public sealed class LayoutOptions'),settings.indexOf('public sealed class QueueItem'));
+const names=[...classPart.matchAll(/public (?:string|double|int|bool|MarginSource|BodyAlignment|TableHeaderAlignment|TableCellVerticalAlignment) (\w+) \{ get; set; \}/g)].map(m=>m[1]).sort();
+assert.deepEqual(names,Object.keys(defaults).sort());
+assert.ok(src.includes('app.pdfExportPresets.itemByName(options.PdfPreset)'));
+assert.ok(src.includes('false,pdfPreset)'));
+assert.ok(src.indexOf("result(true,'Template validated')")<src.indexOf('items[ii].remove()'));
+assert.ok(src.includes('doc.close(SaveOptions.NO)'));
+assert.ok(src.includes("write(new File(out.fsName+'/result.json'),s)"));
+console.log('PASS: defaults, option ranges/types, colors, fonts, margins, contents rows, JSON escaping, C#/JS setting contract and validation ordering.');
