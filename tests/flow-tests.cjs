@@ -39,3 +39,8 @@ assert.throws(()=>h.compareTables(beforeOverset,[{id:3282,cells:[oversetCell]}])
 assert.equal(h.readCellText({id:5,texts:{item:()=>({contents:''})},characters:{length:0}}),'');
 assert.equal(h.readCellText({id:6,texts:{item:()=>({contents:''})},characters:{length:2,everyItem:()=>({getElements:()=>[{contents:'ا'},{contents:'ب'}]})}}),'اب');
 console.log('PASS: overset Cell.contents ignored; text model preserved across layout; true change rejected; empty cell and character fallback supported.');
+
+const engineSource = fs.readFileSync(require('path').join(__dirname, '..', 'Layout-Report.jsx'), 'utf8');
+assert(engineSource.includes('app.pdfExportPreferences'), 'PDF preferences must be read from the InDesign application');
+assert(!engineSource.includes('doc.pdfExportPreferences'), 'Document-level PDF preferences are unsupported in InDesign 21.3');
+console.log('PASS: PDF export preferences use the InDesign application object.');

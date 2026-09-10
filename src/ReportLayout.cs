@@ -12,7 +12,7 @@ using System.Diagnostics;
 using System.Text;
 
 [assembly: AssemblyTitle("Report Layout")]
-[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.1.1.0")]
 public sealed class ReportLayout : Form {
     readonly string root=AppDomain.CurrentDomain.BaseDirectory;
     TextBox report=new TextBox(), template=new TextBox(), title=new TextBox(), output=new TextBox(), log=new TextBox();
@@ -21,7 +21,7 @@ public sealed class ReportLayout : Form {
     bool busy; string lastOutput; NotifyIcon tray; PictureBox logo;
     [STAThread] public static void Main(){Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);Application.Run(new ReportLayout());}
     public ReportLayout(){
-        Text="Report Layout 1.1.0"; ClientSize=new Size(840,650);MinimumSize=Size;MaximumSize=Size;StartPosition=FormStartPosition.CenterScreen;
+        Text="Report Layout 1.1.1"; ClientSize=new Size(840,650);MinimumSize=Size;MaximumSize=Size;StartPosition=FormStartPosition.CenterScreen;
         AutoScaleMode=AutoScaleMode.Dpi;BackColor=Color.FromArgb(245,247,250);Font=new Font("Segoe UI",10);RightToLeft=RightToLeft.No;
         string iconPath=Path.Combine(root,"assets","ReportLayout.ico");
         Icon=new Icon(iconPath,32,32);ShowIcon=true;

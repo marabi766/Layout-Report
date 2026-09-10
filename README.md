@@ -6,7 +6,7 @@
 
 Report Layout is a Windows desktop utility that converts Microsoft Word reports into editable Adobe InDesign documents. Its English WinForms interface drives an InDesign ExtendScript engine that imports DOCX content, applies Persian typography, flows long text across pages, formats editable tables, validates content, and exports INDD, IDML, and PDF files.
 
-**Current release:** `v1.1.0` · **Target:** Windows 10/11 and Adobe InDesign 21.3
+**Current release:** `v1.1.1` · **Target:** Windows 10/11 and Adobe InDesign 21.3
 
 ## Features
 
@@ -49,7 +49,7 @@ Microsoft Word, Python, Node.js, and a separate installer are not required on th
 
 ## Installation
 
-1. Download `Report-Layout-Windows-v1.1.0.zip` from the latest Release.
+1. Download `Report-Layout-Windows-v1.1.1.zip` from the latest Release.
 2. Extract the complete ZIP to a writable folder.
 3. Close older Report Layout instances, including the tray icon.
 4. Double-click `Start.vbs`; use `Start.cmd` if VBScript is unavailable.
@@ -154,7 +154,7 @@ On Windows, install [GitHub CLI](https://cli.github.com/) and run:
 .\Publish-To-GitHub.ps1
 ```
 
-The script signs in when needed, creates a private `report-layout` repository, pushes `main` and `v1.1.0`, builds the Windows ZIP and checksum, and publishes the GitHub Release. To publish publicly, use:
+The script signs in when needed, creates a private `report-layout` repository, pushes `main` and the selected version tag, builds the Windows ZIP and checksum, and publishes the GitHub Release. To publish publicly, use:
 
 ```powershell
 .\Publish-To-GitHub.ps1 -Visibility public

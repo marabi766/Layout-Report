@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 - 2026-09-10
+
+### Fixed
+
+- PDF export failure in InDesign 21.3 caused by reading `pdfExportPreferences` from the document instead of the application.
+
 ## 1.1.0 - 2026-09-09
 
 ### Added

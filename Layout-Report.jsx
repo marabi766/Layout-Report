@@ -1,5 +1,5 @@
 #target indesign
-/* Report Layout 1.1.0 | InDesign 21.3 | UTF-8 | Standalone or Windows COM. */
+/* Report Layout 1.1.1 | InDesign 21.3 | UTF-8 | Standalone or Windows COM. */
 (function () {
     function headingLevel(name) {
         name = String(name).toLowerCase().replace(/[\s_:\-]/g, '');
@@ -225,7 +225,9 @@
         doc.save(new File(out.fsName+'/Report.indd'));
         doc.exportFile(ExportFormat.INDESIGN_MARKUP,new File(out.fsName+'/Report.idml'),false);
         stage='Exporting PDF';say(stage);
-        var pdf=doc.pdfExportPreferences,oldPdf=pdf.properties;
+        // PDF export preferences belong to the InDesign application, not the document.
+        // Accessing this preference through the document fails in InDesign 21.3.
+        var pdf=app.pdfExportPreferences,oldPdf=pdf.properties;
         try{pdf.pageRange=PageRange.ALL_PAGES;pdf.exportReaderSpreads=false;pdf.viewPDF=false;doc.exportFile(ExportFormat.PDF_TYPE,new File(out.fsName+'/Report.pdf'),false);}finally{optional('Restore PDF options',function(){pdf.properties=oldPdf;});}
         say('Completed. Pages: '+doc.pages.length+'; tables: '+tableCount+'. Content unchanged after import.');
         if(warnings.length)say('Warnings:\r\n'+warnings.join('\r\n'));

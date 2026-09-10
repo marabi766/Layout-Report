@@ -2,7 +2,7 @@
 
 ## Purpose and current state
 
-Report Layout automates Persian DOCX-to-InDesign page layout on Windows. Version `v1.1.0` targets Windows 10/11 and InDesign 21.3, uses an English UI, accepts Persian content, and produces INDD, IDML, PDF, logs, and JSON status.
+Report Layout automates Persian DOCX-to-InDesign page layout on Windows. Version `v1.1.1` targets Windows 10/11 and InDesign 21.3, uses an English UI, accepts Persian content, and produces INDD, IDML, PDF, logs, and JSON status.
 
 ## Product decisions
 
@@ -40,6 +40,7 @@ The engine is optimized for the bundled single-page Persian template. Word image
 - Overset `Cell.contents` could appear empty; checks now read the internal text model with character fallback.
 - Tests cover headings, threaded overflow, progress safeguards, table identity/content, overset-aware cell reads, and heading spacing.
 - v1.1.0 added English UI, icons, tray behavior, shortcuts, and guarded success notification.
+- v1.1.1 fixed PDF export on InDesign 21.3 by using application-level PDF export preferences.
 
 ## Next acceptance test
 
