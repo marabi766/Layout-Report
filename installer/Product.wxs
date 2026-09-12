@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Report Layout Preview"
+           Manufacturer="Mohammad Arabi"
+           Version="2.0.0"
+           UpgradeCode="EFC4C3B4-1B62-4AB2-8970-136519A305E9"
+           Language="1033"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <SummaryInformation Description="Report Layout Preview Setup" Manufacturer="Mohammad Arabi" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="Report Layout Preview">
+        <Directory Id="ASSETSFOLDER" Name="assets">
+          <Directory Id="FONTSFOLDER" Name="Document fonts" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Report Layout Preview" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <ComponentGroup Id="ProductComponents">
+      <Component Id="CMP_MainExe" Directory="INSTALLFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F01">
+        <File Id="FILE_MainExe" Source="files\ReportLayout.exe" KeyPath="yes" />
+      </Component>
+
+      <Component Id="CMP_StartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F21">
+        <Shortcut Id="StartMenuShortcut" Name="Report Layout Preview" Target="[INSTALLFOLDER]ReportLayout.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Mohammad Arabi\Report Layout Preview" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <Component Id="CMP_DesktopShortcut" Directory="DesktopFolder" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F22">
+        <Shortcut Id="DesktopShortcut" Name="Report Layout Preview" Target="[INSTALLFOLDER]ReportLayout.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU" Key="Software\Mohammad Arabi\Report Layout Preview" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <Component Id="CMP_Jsx" Directory="INSTALLFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F02">
+        <File Id="FILE_Jsx" Source="files\Layout-Report.jsx" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Ico" Directory="ASSETSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F03">
+        <File Id="FILE_Ico" Source="files\assets\ReportLayout.ico" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Png" Directory="ASSETSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F04">
+        <File Id="FILE_Png" Source="files\assets\ReportLayout.png" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Template" Directory="ASSETSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F05">
+        <File Id="FILE_Template" Source="files\assets\Template.idml" KeyPath="yes" />
+      </Component>
+
+      <Component Id="CMP_Font01" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F10">
+        <File Id="FILE_Font01" Source="files\assets\Document fonts\AdobeArabic-Regular.otf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font02" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F11">
+        <File Id="FILE_Font02" Source="files\assets\Document fonts\Anjoman-ExtraBold.ttf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font03" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F12">
+        <File Id="FILE_Font03" Source="files\assets\Document fonts\IRNazanin.ttf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font04" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F13">
+        <File Id="FILE_Font04" Source="files\assets\Document fonts\IRNazaninBold.ttf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font05" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F14">
+        <File Id="FILE_Font05" Source="files\assets\Document fonts\MinionPro-Regular.otf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font06" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F15">
+        <File Id="FILE_Font06" Source="files\assets\Document fonts\Modam-Black.ttf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font07" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F16">
+        <File Id="FILE_Font07" Source="files\assets\Document fonts\Modam-ExtraBold.ttf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font08" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F17">
+        <File Id="FILE_Font08" Source="files\assets\Document fonts\Modam-Medium.ttf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font09" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F18">
+        <File Id="FILE_Font09" Source="files\assets\Document fonts\Modam-SemiBold.ttf" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_Font10" Directory="FONTSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F19">
+        <File Id="FILE_Font10" Source="files\assets\Document fonts\times.ttf" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="MainFeature" Title="Report Layout Preview" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+
+  </Package>
+</Wix>

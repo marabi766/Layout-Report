@@ -12,13 +12,16 @@ using System.Diagnostics;
 using System.Text;
 using System.Net;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
 
 [assembly: AssemblyTitle("Report Layout")]
 [assembly: AssemblyVersion("2.0.0.0")]
 [assembly: AssemblyInformationalVersion("2.0.0-preview.1")]
 public sealed class ReportLayout : Form {
-    static bool placeholderEdition;
     public const string VersionLabel="2.0.0-preview.1";
+    public const string CopyrightNotice="Copyright © 2026 Mohammad Arabi. All rights reserved.";
+    const string AccessPasswordHash="08329d8ed0053d1ef450dfecf0b945b09a8c464bbab50c553bf122fe543fe238";
+    static string Sha256(string s){using(SHA256 sha=SHA256.Create()){byte[] hash=sha.ComputeHash(Encoding.UTF8.GetBytes(s));StringBuilder sb=new StringBuilder();foreach(byte b in hash)sb.Append(b.ToString("x2"));return sb.ToString();}}
     readonly string root=AppDomain.CurrentDomain.BaseDirectory;
     TabControl tabs=new TabControl();
     TextBox template=new TextBox(),output=new TextBox(),log=new TextBox(),subtitle=new TextBox(),author=new TextBox(),organization=new TextBox(),date=new TextBox(),repository=new TextBox();
@@ -27,20 +30,45 @@ public sealed class ReportLayout : Form {
     Button build,validate,stop,update; ProgressBar progress=new ProgressBar(); Label status=new Label();
     List<Control> locked=new List<Control>(); volatile bool stopping; volatile string cancelFile; bool busy,checkingUpdate; string lastOutput; NotifyIcon tray; PictureBox logo;
     LayoutOptions layout=new LayoutOptions();
-    [STAThread] public static void Main(string[] args){placeholderEdition=Array.Exists(args,a=>String.Equals(a,"--image-placeholders",StringComparison.OrdinalIgnoreCase));SettingsStore.ProfileName=placeholderEdition?"settings-placeholders.json":"settings.json";bool created;using(Mutex single=new Mutex(true,"Local\\ReportLayoutPreview",out created)){if(!created){MessageBox.Show("Report Layout Preview is already running. Close it before opening the other edition.","Report Layout");return;}try{Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);Application.Run(new ReportLayout());}finally{single.ReleaseMutex();}}}
+    [STAThread] public static void Main(){
+        Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
+        bool created;using(Mutex single=new Mutex(true,"Local\\ReportLayoutPreview",out created)){
+            if(!created){MessageBox.Show("Report Layout Preview is already running.","Report Layout");return;}
+            if(!SignIn())return;
+            try{Application.Run(new ReportLayout());}finally{single.ReleaseMutex();}
+        }
+    }
+    static bool SignIn(){
+        using(Form dlg=new Form()){
+            dlg.Text="Report Layout - Sign In";dlg.FormBorderStyle=FormBorderStyle.FixedDialog;dlg.StartPosition=FormStartPosition.CenterScreen;
+            dlg.ClientSize=new Size(360,160);dlg.MaximizeBox=false;dlg.MinimizeBox=false;dlg.ShowInTaskbar=true;dlg.Font=new Font("Segoe UI",10);
+            Label lbl=new Label();lbl.Text="Enter password to continue:";lbl.SetBounds(20,20,320,24);dlg.Controls.Add(lbl);
+            TextBox box=new TextBox();box.SetBounds(20,48,320,28);box.UseSystemPasswordChar=true;dlg.Controls.Add(box);
+            Label err=new Label();err.ForeColor=Color.Firebrick;err.SetBounds(20,80,320,36);dlg.Controls.Add(err);
+            Button ok=new Button();ok.Text="Sign In";ok.SetBounds(160,120,90,32);ok.DialogResult=DialogResult.OK;dlg.Controls.Add(ok);
+            Button cancel=new Button();cancel.Text="Exit";cancel.SetBounds(258,120,82,32);cancel.DialogResult=DialogResult.Cancel;dlg.Controls.Add(cancel);
+            dlg.AcceptButton=ok;dlg.CancelButton=cancel;
+            while(true){
+                if(dlg.ShowDialog()!=DialogResult.OK)return false;
+                if(Sha256(box.Text)==AccessPasswordHash)return true;
+                err.Text="Incorrect password. Please try again.";box.Text="";box.Focus();
+            }
+        }
+    }
     public ReportLayout(){
-        Text="Report Layout "+VersionLabel+(placeholderEdition?" - Image Placeholders":"");ClientSize=new Size(1000,760);MinimumSize=new Size(850,650);StartPosition=FormStartPosition.CenterScreen;AutoScaleMode=AutoScaleMode.Dpi;BackColor=Color.FromArgb(245,247,250);Font=new Font("Segoe UI",10);RightToLeft=RightToLeft.No;
+        Text="Report Layout "+VersionLabel;ClientSize=new Size(1000,760);MinimumSize=new Size(850,650);StartPosition=FormStartPosition.CenterScreen;AutoScaleMode=AutoScaleMode.Dpi;BackColor=Color.FromArgb(245,247,250);Font=new Font("Segoe UI",10);RightToLeft=RightToLeft.No;
         string iconPath=Path.Combine(root,"assets","ReportLayout.ico");Icon=new Icon(iconPath,32,32);
         Panel header=new Panel();header.Height=105;header.Dock=DockStyle.Top;Controls.Add(header);
         logo=new PictureBox();logo.SetBounds(20,10,85,85);logo.SizeMode=PictureBoxSizeMode.Zoom;logo.Image=Image.FromFile(Path.Combine(root,"assets","ReportLayout.png"));header.Controls.Add(logo);
         Label name=new Label();name.Text="Report Layout";name.Font=new Font("Segoe UI",23,FontStyle.Bold);name.ForeColor=Color.FromArgb(21,79,158);name.SetBounds(125,17,650,42);header.Controls.Add(name);
         Label hint=new Label();hint.Text="Word to InDesign | Layout presets, batch reports and review | "+VersionLabel;hint.SetBounds(128,64,800,30);header.Controls.Add(hint);
-        Panel bottom=new Panel();bottom.Height=90;bottom.Dock=DockStyle.Bottom;Controls.Add(bottom);
+        Panel bottom=new Panel();bottom.Height=110;bottom.Dock=DockStyle.Bottom;Controls.Add(bottom);
         FlowLayoutPanel actions=new FlowLayoutPanel();actions.Dock=DockStyle.Top;actions.Height=48;bottom.Controls.Add(actions);
         build=ButtonAt(actions,"Build Reports",delegate{StartWork(false);});build.BackColor=Color.FromArgb(21,79,158);build.ForeColor=Color.White;
         validate=ButtonAt(actions,"Validate Template",delegate{StartWork(true);});
         stop=ButtonAt(actions,"Cancel Current Job",RequestStop);stop.Enabled=false;
         ButtonAt(actions,"Open Output Folder",delegate{OpenPath(lastOutput??output.Text);});
+        Label footer=new Label();footer.Text="Report Layout "+VersionLabel+"   |   "+CopyrightNotice;footer.Font=new Font("Segoe UI",8);footer.ForeColor=Color.Gray;footer.TextAlign=ContentAlignment.MiddleCenter;footer.Dock=DockStyle.Bottom;footer.Height=18;bottom.Controls.Add(footer);
         progress.Dock=DockStyle.Bottom;progress.Height=7;bottom.Controls.Add(progress);status.Dock=DockStyle.Bottom;status.Height=28;status.Text="Ready";bottom.Controls.Add(status);
         tabs.Dock=DockStyle.Fill;Controls.Add(tabs);tabs.BringToFront();
         TabPage reportsPage=Page("Reports"),layoutPage=Page("Layout Settings"),detailsPage=Page("Cover & Details"),resultPage=Page("Results"),settingsPage=Page("Preferences"),logPage=Page("Log");
@@ -75,7 +103,7 @@ public sealed class ReportLayout : Form {
         Resize+=delegate{if(WindowState==FormWindowState.Minimized)Hide();};
         FormClosing+=delegate(object sender,FormClosingEventArgs e){if(busy){e.Cancel=true;ShowMain();RequestStop();MessageBox.Show(this,"Cancellation was requested. Report Layout will close the working copy and return when InDesign reaches the next safe checkpoint.","Report Layout");}else SaveSettings();};
         FormClosed+=delegate{tray.Visible=false;tray.Icon.Dispose();tray.Dispose();menu.Dispose();logo.Image.Dispose();Icon.Dispose();};
-        template.Text=Path.Combine(root,"assets","Template.idml");output.Text=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Report Layout");LoadSettings();if(placeholderEdition){layout.ReplaceImagesWithPlaceholders=true;properties.Refresh();}
+        template.Text=Path.Combine(root,"assets","Template.idml");output.Text=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Report Layout");LoadSettings();
         Shown+=delegate{if(updateAtStart.Checked)CheckUpdates(true);};AddLog("Ready. Validate Template loads InDesign fonts and PDF presets. Preview version: Windows/InDesign acceptance testing is still required.");
     }
     TabPage Page(string text){TabPage p=new TabPage(text);p.Padding=new Padding(10);tabs.TabPages.Add(p);return p;}
@@ -103,7 +131,6 @@ public sealed class ReportLayout : Form {
     void ExportPreset(){try{Validate();layout.Validate();using(SaveFileDialog d=new SaveFileDialog()){d.Filter="Layout preset (*.json)|*.json";d.FileName="layout-preset.json";if(d.ShowDialog(this)==DialogResult.OK)SettingsStore.Write(d.FileName,layout);}}catch(Exception e){MessageBox.Show(this,e.Message,"Export preset");}}
     void ChooseColor(){GridItem item=properties.SelectedGridItem;if(item==null||item.PropertyDescriptor==null||(item.PropertyDescriptor.Name!="AccentColor"&&item.PropertyDescriptor.Name!="TableColor")){MessageBox.Show(this,"Select Heading color or Table color first.");return;}using(ColorDialog d=new ColorDialog()){if(d.ShowDialog(this)==DialogResult.OK){item.PropertyDescriptor.SetValue(layout,"#"+d.Color.R.ToString("X2")+d.Color.G.ToString("X2")+d.Color.B.ToString("X2"));properties.Refresh();}}}
     void StartWork(bool validationOnly){
-        if(placeholderEdition){layout.ImportInlineImages=true;layout.ReplaceImagesWithPlaceholders=true;properties.Refresh();}
         UserSettings s;try{Validate();layout.Validate();s=Snapshot();if(!File.Exists(s.Template))throw new Exception("Select an existing InDesign template.");if(String.IsNullOrWhiteSpace(s.Output))throw new Exception("Select an output folder.");if(!validationOnly){if(s.Reports.Count==0)throw new Exception("Select one or more DOCX reports.");foreach(QueueItem q in s.Reports){if(!File.Exists(q.Report)||!q.Report.EndsWith(".docx",StringComparison.OrdinalIgnoreCase))throw new Exception("Missing DOCX report: "+q.Report);if(String.IsNullOrWhiteSpace(q.Title))throw new Exception("Enter a title for every report.");}}if(!File.Exists(Path.Combine(root,"Layout-Report.jsx")))throw new Exception("Layout-Report.jsx is missing.");}
         catch(Exception e){MessageBox.Show(this,e.Message,"Check settings");return;}
         SaveSettings();stopping=false;Busy(true);results.Rows.Clear();Thread worker=new Thread(delegate(){RunQueue(s,validationOnly);});worker.SetApartmentState(ApartmentState.STA);worker.IsBackground=true;worker.Start();

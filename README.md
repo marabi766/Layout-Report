@@ -36,6 +36,8 @@ This preview adds all ten planned feature groups. Portable tests pass, including
 - Success dialog and tray notification after all required output files are verified
 - Source DOCX and template preserved by opening a template copy
 - Diagnostic logs and a recoverable review document on failure
+- Password-gated sign-in at startup (checked against a stored SHA-256 hash)
+- Version number and copyright notice shown in the window footer
 
 ## Workflow
 
@@ -54,25 +56,21 @@ flowchart TD
 ## Requirements
 
 - Windows 10 or Windows 11
-- Windows PowerShell 5.1
-- .NET Framework with the C# CodeDOM compiler
+- .NET Framework (for running the installed application)
 - Installed Adobe InDesign; version 21.3 is the target
 - Fonts required by the selected template
 
-Microsoft Word, Python, Node.js, and a separate installer are not required on the target computer.
+Microsoft Word, Python, and Node.js are not required on the target computer.
 
 ## Installation
 
-1. Download `Report-Layout-Windows-v2.0.0-preview.1.zip`.
-2. Extract the complete ZIP to a writable folder.
-3. Close older Report Layout instances, including the tray icon.
-4. Double-click `Start.vbs`; use `Start.cmd` if VBScript is unavailable.
-5. The launcher installs under `%LOCALAPPDATA%\ReportLayoutPreview`, compiles all `src/*.cs` files locally, and creates **Report Layout Preview** Desktop and Start Menu shortcuts. The stable v1.1.1 installation is left intact.
-6. Use either shortcut for later launches.
+1. Download `ReportLayoutPreview-2.0.0-preview.1-Setup.msi` from the latest Release.
+2. Run the MSI and follow the prompts; it installs to `Program Files\Report Layout Preview` and creates Desktop and Start Menu shortcuts. The stable v1.1.1 installation, if present, is left intact.
+3. Launch **Report Layout Preview** from either shortcut and sign in with the application password.
 
-For the separate image-placeholder edition, close the regular Report Layout window (including its tray icon) and double-click `Start-Placeholders.vbs`. This launcher uses the portable build in `bin`, stores its preferences separately, forces inline-image import, and replaces every imported image with an empty bordered frame carrying an internal `REPORT_IMAGE_PLACEHOLDER_n` label for later manual placement.
+Building from source instead (`src/*.cs` compiled locally via `Build-and-Run.ps1` / `Start.vbs`) still works for development but is no longer the distributed package; see [Development](#development).
 
-The package contains source instead of a precompiled EXE. Windows compiles it locally using installed .NET Framework components.
+Inline images can be kept and resized, or replaced with empty numbered placeholder frames for manual placement later — toggle **Replace images with placeholders** under **Layout Settings > Images**. Earlier previews shipped this as a separate `Start-Placeholders.vbs` edition; it is now a single normal option in the same app.
 
 ## Usage
 
@@ -92,7 +90,7 @@ The property grid exposes fonts, type sizes, line/paragraph spacing, heading/tab
 
 Margin source **Legacy** preserves the previously approved body geometry for `D1-Main Body`. **Template** uses first-page margins; **Custom** uses four explicit values. A blank Parent page name prefers the bundled `D1-Main Body`, falling back to the first page's applied parent. Enter a parent name to require that exact parent.
 
-The border, footer, logo and page-number art remain controlled by the parent in the IDML template. Report text/table formatting comes from the layout settings and overrides matching report paragraph styles on the opened copy. Headings 2-9 still map to the second visual level. Inline images can either be retained and resized or replaced with empty frames by the placeholder edition.
+The border, footer, logo and page-number art remain controlled by the parent in the IDML template. Report text/table formatting comes from the layout settings and overrides matching report paragraph styles on the opened copy. Headings 2-9 still map to the second visual level. Inline images can either be retained and resized or replaced with empty frames, controlled by the **Replace images with placeholders** layout option.
 
 ### Table of contents
 
@@ -138,7 +136,7 @@ Manual font sizing does not replace Word heading styles. Inline bold in ordinary
 
 Set supported images to **In Line with Text** in Word. Under **Layout Settings > Images**, enable image import and choose maximum width and height percentages relative to the report text frame. Oversized inline images are reduced proportionally, remain anchored with their source paragraph, and participate in the normal overflow/page-flow checks. Smaller images are never enlarged. Floating Word images are not repositioned automatically and are reported as warnings; convert them to In Line with Text for predictable output.
 
-The **Replace images with placeholders** option removes each imported graphic but preserves its proportionally constrained anchored frame. The dedicated `Start-Placeholders.vbs` launcher always enables this option and uses a separate settings profile.
+The **Replace images with placeholders** option removes each imported graphic but preserves its proportionally constrained anchored frame, numbered for manual placement later. It is an ordinary Layout Settings checkbox, saved with the rest of the layout preset like any other option.
 
 ## Preparing another InDesign template
 
@@ -176,9 +174,9 @@ The bundled workflow uses IRNazanin for body text and Modam for headings, a Worl
 | `src/ReportLayout.cs` | WinForms UI, tray, COM bridge, validation, notifications |
 | `src/Settings.cs` | Property-grid schema, presets, validation, persistence |
 | `Layout-Report.jsx` | Import, typography, page flow, tables, checks, exports |
-| `Build-and-Run.ps1` | Per-user installation, compilation, icon, shortcuts |
-| `Start.vbs` / `Start.cmd` | Regular quiet and fallback launchers |
-| `Start-Placeholders.vbs` / `Start-Placeholders.cmd` | Separate empty-image-frame edition |
+| `Build-and-Run.ps1` | Per-user build-from-source installation, compilation, icon, shortcuts |
+| `Start.vbs` / `Start.cmd` | Quiet and fallback launchers for the build-from-source path |
+| `installer/Product.wxs` | WiX source for the distributed MSI installer |
 | `assets/Template.idml` | Bundled baseline template |
 | `assets/ReportLayout.ico` | Multi-size Windows icon |
 | `tests/flow-tests.cjs` | Portable engine regression tests |
