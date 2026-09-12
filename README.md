@@ -22,6 +22,8 @@ Report Layout is a Windows desktop utility that converts Microsoft Word reports 
 - Success dialog and tray notification after all required output files are verified
 - Source DOCX and template preserved by opening a template copy
 - Diagnostic logs and a recoverable review document on failure
+- Password-gated sign-in at startup (checked against a stored SHA-256 hash)
+- Version number and copyright notice shown in the window footer
 
 ## Workflow
 
@@ -40,23 +42,19 @@ flowchart TD
 ## Requirements
 
 - Windows 10 or Windows 11
-- Windows PowerShell 5.1
-- .NET Framework with the C# CodeDOM compiler
+- .NET Framework (for running the installed application)
 - Installed Adobe InDesign; version 21.3 is the target
 - Fonts required by the selected template
 
-Microsoft Word, Python, Node.js, and a separate installer are not required on the target computer.
+Microsoft Word, Python, and Node.js are not required on the target computer.
 
 ## Installation
 
-1. Download `Report-Layout-Windows-v1.1.1.zip` from the latest Release.
-2. Extract the complete ZIP to a writable folder.
-3. Close older Report Layout instances, including the tray icon.
-4. Double-click `Start.vbs`; use `Start.cmd` if VBScript is unavailable.
-5. The launcher installs under `%LOCALAPPDATA%\ReportLayout`, compiles the EXE locally, and creates current-user Desktop and Start Menu shortcuts.
-6. Use either shortcut for later launches.
+1. Download `ReportLayout-1.1.1-Setup.msi` from the latest Release.
+2. Run the MSI and follow the prompts; it installs to `Program Files\Report Layout` and creates Desktop and Start Menu shortcuts.
+3. Launch **Report Layout** from either shortcut and sign in with the application password.
 
-The package contains source instead of a precompiled EXE. Windows compiles it locally using installed .NET Framework components.
+Building from source instead (`src/ReportLayout.cs` compiled locally via `Build-and-Run.ps1` / `Start.vbs`) still works for development but is no longer the distributed package; see [Development](#development).
 
 ## Usage
 
@@ -128,8 +126,9 @@ The bundled workflow uses IRNazanin for body text and Modam for headings, a Worl
 | --- | --- |
 | `src/ReportLayout.cs` | WinForms UI, tray, COM bridge, validation, notifications |
 | `Layout-Report.jsx` | Import, typography, page flow, tables, checks, exports |
-| `Build-and-Run.ps1` | Per-user installation, compilation, icon, shortcuts |
-| `Start.vbs` / `Start.cmd` | Quiet and fallback launchers |
+| `Build-and-Run.ps1` | Per-user build-from-source installation, compilation, icon, shortcuts |
+| `Start.vbs` / `Start.cmd` | Quiet and fallback launchers for the build-from-source path |
+| `installer/Product.wxs` | WiX source for the distributed MSI installer |
 | `assets/Template.idml` | Bundled baseline template |
 | `assets/ReportLayout.ico` | Multi-size Windows icon |
 | `tests/flow-tests.cjs` | Portable engine regression tests |

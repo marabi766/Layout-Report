@@ -10,18 +10,44 @@ using System.Collections.Generic;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Text;
+using System.Security.Cryptography;
 
 [assembly: AssemblyTitle("Report Layout")]
 [assembly: AssemblyVersion("1.1.1.0")]
 public sealed class ReportLayout : Form {
+    public const string VersionLabel="1.1.1";
+    public const string CopyrightNotice="Copyright © 2026 Mohammad Arabi. All rights reserved.";
+    const string AccessPasswordHash="08329d8ed0053d1ef450dfecf0b945b09a8c464bbab50c553bf122fe543fe238";
+    static string Sha256(string s){using(SHA256 sha=SHA256.Create()){byte[] hash=sha.ComputeHash(Encoding.UTF8.GetBytes(s));StringBuilder sb=new StringBuilder();foreach(byte b in hash)sb.Append(b.ToString("x2"));return sb.ToString();}}
     readonly string root=AppDomain.CurrentDomain.BaseDirectory;
     TextBox report=new TextBox(), template=new TextBox(), title=new TextBox(), output=new TextBox(), log=new TextBox();
     Button chooseReport=new Button(),chooseTemplate=new Button(),chooseOutput=new Button(),build=new Button(),openOutput=new Button();
     CheckBox cover=new CheckBox(); ProgressBar progress=new ProgressBar();
     bool busy; string lastOutput; NotifyIcon tray; PictureBox logo;
-    [STAThread] public static void Main(){Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);Application.Run(new ReportLayout());}
+    [STAThread] public static void Main(){
+        Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
+        if(!SignIn())return;
+        Application.Run(new ReportLayout());
+    }
+    static bool SignIn(){
+        using(Form dlg=new Form()){
+            dlg.Text="Report Layout - Sign In";dlg.FormBorderStyle=FormBorderStyle.FixedDialog;dlg.StartPosition=FormStartPosition.CenterScreen;
+            dlg.ClientSize=new Size(360,160);dlg.MaximizeBox=false;dlg.MinimizeBox=false;dlg.ShowInTaskbar=true;dlg.Font=new Font("Segoe UI",10);
+            Label lbl=new Label();lbl.Text="Enter password to continue:";lbl.SetBounds(20,20,320,24);dlg.Controls.Add(lbl);
+            TextBox box=new TextBox();box.SetBounds(20,48,320,28);box.UseSystemPasswordChar=true;dlg.Controls.Add(box);
+            Label err=new Label();err.ForeColor=Color.Firebrick;err.SetBounds(20,80,320,36);dlg.Controls.Add(err);
+            Button ok=new Button();ok.Text="Sign In";ok.SetBounds(160,120,90,32);ok.DialogResult=DialogResult.OK;dlg.Controls.Add(ok);
+            Button cancel=new Button();cancel.Text="Exit";cancel.SetBounds(258,120,82,32);cancel.DialogResult=DialogResult.Cancel;dlg.Controls.Add(cancel);
+            dlg.AcceptButton=ok;dlg.CancelButton=cancel;
+            while(true){
+                if(dlg.ShowDialog()!=DialogResult.OK)return false;
+                if(Sha256(box.Text)==AccessPasswordHash)return true;
+                err.Text="Incorrect password. Please try again.";box.Text="";box.Focus();
+            }
+        }
+    }
     public ReportLayout(){
-        Text="Report Layout 1.1.1"; ClientSize=new Size(840,650);MinimumSize=Size;MaximumSize=Size;StartPosition=FormStartPosition.CenterScreen;
+        Text="Report Layout "+VersionLabel; ClientSize=new Size(840,650);MinimumSize=Size;MaximumSize=Size;StartPosition=FormStartPosition.CenterScreen;
         AutoScaleMode=AutoScaleMode.Dpi;BackColor=Color.FromArgb(245,247,250);Font=new Font("Segoe UI",10);RightToLeft=RightToLeft.No;
         string iconPath=Path.Combine(root,"assets","ReportLayout.ico");
         Icon=new Icon(iconPath,32,32);ShowIcon=true;
@@ -38,6 +64,7 @@ public sealed class ReportLayout : Form {
         Label tip=new Label();tip.Text="Minimize to keep the app in the system tray.";tip.SetBounds(30,435,760,24);Controls.Add(tip);
         progress.SetBounds(30,467,780,8);Controls.Add(progress);
         log.SetBounds(30,490,780,134);log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;log.BackColor=Color.White;Controls.Add(log);
+        Label footer=new Label();footer.Text="Report Layout "+VersionLabel+"   |   "+CopyrightNotice;footer.Font=new Font("Segoe UI",8);footer.ForeColor=Color.Gray;footer.TextAlign=ContentAlignment.MiddleCenter;footer.SetBounds(30,628,780,18);Controls.Add(footer);
         chooseReport.Click+=delegate {using(OpenFileDialog d=new OpenFileDialog()){d.Title="Select Word Report";d.Filter="Word report (*.docx)|*.docx";if(d.ShowDialog()==DialogResult.OK){report.Text=d.FileName;title.Text=Path.GetFileNameWithoutExtension(d.FileName);}}};
         chooseTemplate.Click+=delegate {using(OpenFileDialog d=new OpenFileDialog()){d.Title="Select InDesign Template";d.Filter="InDesign template|*.idml;*.indd;*.indt";if(d.ShowDialog()==DialogResult.OK)template.Text=d.FileName;}};
         chooseOutput.Click+=delegate {using(FolderBrowserDialog d=new FolderBrowserDialog()){d.Description="Select Output Folder";if(d.ShowDialog()==DialogResult.OK)output.Text=d.SelectedPath;}};
