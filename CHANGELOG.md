@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Merged the separate image-placeholder launcher/edition into the single application. **Replace images with placeholders** is now an ordinary Layout Settings option instead of a dedicated `Start-Placeholders.vbs` launcher and settings profile.
+- Added a password-protected sign-in prompt at startup, checked against a stored SHA-256 hash.
+- Added a version number and copyright notice to the main window footer.
+- Packaged the application as a single MSI installer (WiX), replacing the zip + `Start.vbs` distribution.
+
 ## 2.0.0-preview.1 - 2026-09-10
 
 ### Added
