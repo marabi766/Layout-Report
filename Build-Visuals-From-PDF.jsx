@@ -8,7 +8,7 @@
 (function () {
     var spec = (typeof VISUAL_SPEC !== 'undefined') ? VISUAL_SPEC : null;
     var log = [];
-    var MAX_ITEMS_PER_PAGE = 300; // safety cap against decorative-noise pages
+    var MAX_ITEMS_PER_PAGE = 1200; // safety cap against decorative-noise pages; dense multi-series charts can legitimately need many hundreds of rects/lines
     function say(s) { log.push(s); }
     function result(ok, message) {
         var value = { ok: ok, message: message };
