@@ -13,7 +13,7 @@ This preview adds all ten planned feature groups. Portable tests pass, including
 ## Features
 
 - **Select Reports**, **Select Template**, and **Build Reports**, with editable per-report titles
-- **Build Template from PDF**: measures an existing PDF's page size, margins and colors and generates a fresh Cover + Body-Master `.idml` template from them (no PDF text or images are copied)
+- **Build Template from PDF**: scans every page of a reference PDF, groups them into the recurring page styles found (ordinary text, chart/exhibit, full-bleed divider, image-only), and generates a fresh `.idml` template with one master spread per style plus a cover (no PDF text or images are copied)
 - Four built-in presets: Economic Report, Book Summary, Research Report, Compact Report
 - Editable layout settings, color picker, installed-font dropdowns, JSON preset import/export
 - Editable heading-number separator (default `-`, for example `11-2`) and explicit per-report titles
