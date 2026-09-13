@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Build Template from PDF**: pick any PDF plus a cover-page and body-page number, and the app measures page size, margins and colors (including gradient/photo cover backgrounds) and generates a matching Cover + Body-Master `.idml` template, ready to select and build reports with. Implemented as a from-scratch, dependency-free PDF reader (`src/PdfAnalyzer.cs`, `src/PdfContentAnalyzer.cs`, `src/PdfTemplateSpecBuilder.cs`) so the app stays a single self-contained executable with no Python/Node runtime requirement.
+
 ### Changed
 
 - Merged the separate image-placeholder launcher/edition into the single application. **Replace images with placeholders** is now an ordinary Layout Settings option instead of a dedicated `Start-Placeholders.vbs` launcher and settings profile.
