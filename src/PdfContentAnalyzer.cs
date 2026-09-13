@@ -38,6 +38,12 @@ public sealed class FillRect {
     public int[] Color;
 }
 
+public sealed class Line {
+    public double X0, Y0, X1, Y1;
+    public int[] Color;
+    public double Width; // page-space stroke width
+}
+
 public sealed class ImagePlacement {
     public double X0, Y0, X1, Y1;
     public PVal ImageObj;
@@ -46,6 +52,7 @@ public sealed class ImagePlacement {
 public sealed class ContentAnalysis {
     public List<TextRun> TextRuns = new List<TextRun>();
     public List<FillRect> FillRects = new List<FillRect>();
+    public List<Line> Lines = new List<Line>();
     public List<ImagePlacement> Images = new List<ImagePlacement>();
     public int[] GradientStart, GradientEnd; // null if no shading found
 }
@@ -54,7 +61,17 @@ public static class PdfContentAnalyzer {
     class GState {
         public Mat Ctm = Mat.Identity;
         public int[] FillColor = new int[] { 0, 0, 0 };
+        public int[] StrokeColor = new int[] { 0, 0, 0 };
+        public double LineWidth = 1;
     }
+
+    // A "subpath" is a run of points already transformed into page space at
+    // the moment each construction operator ran (re-using the CTM active at
+    // that time; content streams essentially never change the CTM mid-path,
+    // so this is safe in practice). Curves are flattened to their endpoint --
+    // acceptable for report-style rules/borders, which are almost always
+    // straight lines and axis-aligned rectangles.
+    class Subpath { public List<double[]> Points = new List<double[]>(); public bool IsRect; }
 
     public static ContentAnalysis Analyze(byte[] content, PdfDocument doc, PVal resources) {
         var result = new ContentAnalysis();
@@ -63,6 +80,8 @@ public static class PdfContentAnalyzer {
         var operands = new List<PVal>();
         Mat tm = Mat.Identity, tlm = Mat.Identity;
         double fontSize = 0;
+        var path = new List<Subpath>();
+        double curX = 0, curY = 0, startX = 0, startY = 0;
 
         var lex = new PdfLexer(content, 0);
         while (lex.Pos < lex.Length) {
@@ -82,40 +101,88 @@ public static class PdfContentAnalyzer {
                         gs.Ctm = Mat.Concat(m, gs.Ctm);
                     }
                     break;
+                case "w": if (operands.Count >= 1) gs.LineWidth = N(operands, 0); break;
                 case "g": if (operands.Count >= 1) { int gv = (int)Math.Round(N(operands, 0) * 255); gs.FillColor = new[] { gv, gv, gv }; } break;
+                case "G": if (operands.Count >= 1) { int gv = (int)Math.Round(N(operands, 0) * 255); gs.StrokeColor = new[] { gv, gv, gv }; } break;
                 case "rg":
                     if (operands.Count >= 3) gs.FillColor = new[] { (int)Math.Round(N(operands, 0) * 255), (int)Math.Round(N(operands, 1) * 255), (int)Math.Round(N(operands, 2) * 255) };
                     break;
+                case "RG":
+                    if (operands.Count >= 3) gs.StrokeColor = new[] { (int)Math.Round(N(operands, 0) * 255), (int)Math.Round(N(operands, 1) * 255), (int)Math.Round(N(operands, 2) * 255) };
+                    break;
                 case "k":
-                    if (operands.Count >= 4) {
-                        double c = N(operands, 0), m2 = N(operands, 1), y2 = N(operands, 2), k2 = N(operands, 3);
-                        gs.FillColor = new[] {
-                            (int)Math.Round(255 * (1 - c) * (1 - k2)),
-                            (int)Math.Round(255 * (1 - m2) * (1 - k2)),
-                            (int)Math.Round(255 * (1 - y2) * (1 - k2)) };
-                    }
+                    if (operands.Count >= 4) gs.FillColor = CmykToRgb(operands);
+                    break;
+                case "K":
+                    if (operands.Count >= 4) gs.StrokeColor = CmykToRgb(operands);
                     break;
                 case "scn": case "SCN":
-                    if (operands.Count >= 3) gs.FillColor = new[] { (int)Math.Round(N(operands, 0) * 255), (int)Math.Round(N(operands, 1) * 255), (int)Math.Round(N(operands, 2) * 255) };
-                    else if (operands.Count == 1 && operands[0].Kind == PKind.Name) {
+                    if (operands.Count >= 3) {
+                        int[] c = { (int)Math.Round(N(operands, 0) * 255), (int)Math.Round(N(operands, 1) * 255), (int)Math.Round(N(operands, 2) * 255) };
+                        if (op == "scn") gs.FillColor = c; else gs.StrokeColor = c;
+                    } else if (operands.Count == 1 && operands[0].Kind == PKind.Name) {
                         TryResolvePatternGradient(operands[0].Text, resources, doc, result);
                     }
                     break;
                 case "sh":
                     if (operands.Count >= 1 && operands[0].Kind == PKind.Name) TryResolveShadingGradient(operands[0].Text, resources, doc, result);
                     break;
-                case "re":
-                    if (operands.Count >= 4) {
-                        double x = N(operands, 0), y = N(operands, 1), w = N(operands, 2), h = N(operands, 3);
-                        double px0 = gs.Ctm.TX(x, y), py0 = gs.Ctm.TY(x, y);
-                        double px1 = gs.Ctm.TX(x + w, y + h), py1 = gs.Ctm.TY(x + w, y + h);
-                        result.FillRects.Add(new FillRect {
-                            X0 = Math.Min(px0, px1), Y0 = Math.Min(py0, py1),
-                            X1 = Math.Max(px0, px1), Y1 = Math.Max(py0, py1),
-                            Color = gs.FillColor
-                        });
+
+                // ---- Path construction (coordinates transformed to page space now) ----
+                case "m":
+                    if (operands.Count >= 2) {
+                        curX = N(operands, 0); curY = N(operands, 1); startX = curX; startY = curY;
+                        var sp = new Subpath(); sp.Points.Add(new[] { gs.Ctm.TX(curX, curY), gs.Ctm.TY(curX, curY) });
+                        path.Add(sp);
                     }
                     break;
+                case "l":
+                    if (operands.Count >= 2 && path.Count > 0) {
+                        curX = N(operands, 0); curY = N(operands, 1);
+                        path[path.Count - 1].Points.Add(new[] { gs.Ctm.TX(curX, curY), gs.Ctm.TY(curX, curY) });
+                    }
+                    break;
+                case "c":
+                    if (operands.Count >= 6 && path.Count > 0) { curX = N(operands, 4); curY = N(operands, 5); path[path.Count - 1].Points.Add(new[] { gs.Ctm.TX(curX, curY), gs.Ctm.TY(curX, curY) }); }
+                    break;
+                case "v":
+                    if (operands.Count >= 4 && path.Count > 0) { curX = N(operands, 2); curY = N(operands, 3); path[path.Count - 1].Points.Add(new[] { gs.Ctm.TX(curX, curY), gs.Ctm.TY(curX, curY) }); }
+                    break;
+                case "y":
+                    if (operands.Count >= 4 && path.Count > 0) { curX = N(operands, 2); curY = N(operands, 3); path[path.Count - 1].Points.Add(new[] { gs.Ctm.TX(curX, curY), gs.Ctm.TY(curX, curY) }); }
+                    break;
+                case "h":
+                    if (path.Count > 0) path[path.Count - 1].Points.Add(new[] { gs.Ctm.TX(startX, startY), gs.Ctm.TY(startX, startY) });
+                    break;
+                case "re":
+                    if (operands.Count >= 4) {
+                        double x = N(operands, 0), y = N(operands, 1), rw = N(operands, 2), rh = N(operands, 3);
+                        var sp = new Subpath { IsRect = true };
+                        sp.Points.Add(new[] { gs.Ctm.TX(x, y), gs.Ctm.TY(x, y) });
+                        sp.Points.Add(new[] { gs.Ctm.TX(x + rw, y), gs.Ctm.TY(x + rw, y) });
+                        sp.Points.Add(new[] { gs.Ctm.TX(x + rw, y + rh), gs.Ctm.TY(x + rw, y + rh) });
+                        sp.Points.Add(new[] { gs.Ctm.TX(x, y + rh), gs.Ctm.TY(x, y + rh) });
+                        path.Add(sp);
+                        curX = x; curY = y; startX = x; startY = y;
+                    }
+                    break;
+
+                // ---- Painting: consumes the accumulated path, then clears it ----
+                case "f": case "F": case "f*":
+                    PaintFill(path, gs, result); path.Clear(); break;
+                case "S":
+                    PaintStroke(path, gs, result); path.Clear(); break;
+                case "s":
+                    if (path.Count > 0) path[path.Count - 1].Points.Add(new[] { gs.Ctm.TX(startX, startY), gs.Ctm.TY(startX, startY) });
+                    PaintStroke(path, gs, result); path.Clear(); break;
+                case "B": case "B*":
+                    PaintFill(path, gs, result); PaintStroke(path, gs, result); path.Clear(); break;
+                case "b": case "b*":
+                    if (path.Count > 0) path[path.Count - 1].Points.Add(new[] { gs.Ctm.TX(startX, startY), gs.Ctm.TY(startX, startY) });
+                    PaintFill(path, gs, result); PaintStroke(path, gs, result); path.Clear(); break;
+                case "n":
+                    path.Clear(); break;
+
                 case "Tf":
                     if (operands.Count >= 2) fontSize = N(operands, 1);
                     break;
@@ -149,7 +216,36 @@ public static class PdfContentAnalyzer {
         return result;
     }
 
-    static GState Clone(GState g) { return new GState { Ctm = g.Ctm, FillColor = g.FillColor }; }
+    static int[] CmykToRgb(List<PVal> operands) {
+        double c = N(operands, 0), m2 = N(operands, 1), y2 = N(operands, 2), k2 = N(operands, 3);
+        return new[] {
+            (int)Math.Round(255 * (1 - c) * (1 - k2)),
+            (int)Math.Round(255 * (1 - m2) * (1 - k2)),
+            (int)Math.Round(255 * (1 - y2) * (1 - k2)) };
+    }
+
+    static void PaintFill(List<Subpath> path, GState gs, ContentAnalysis result) {
+        foreach (var sp in path) {
+            if (sp.Points.Count < 2) continue;
+            double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+            foreach (var p in sp.Points) { x0 = Math.Min(x0, p[0]); y0 = Math.Min(y0, p[1]); x1 = Math.Max(x1, p[0]); y1 = Math.Max(y1, p[1]); }
+            if (x1 - x0 < 0.1 || y1 - y0 < 0.1) continue; // degenerate (a stroked-only line etc.)
+            result.FillRects.Add(new FillRect { X0 = x0, Y0 = y0, X1 = x1, Y1 = y1, Color = gs.FillColor });
+        }
+    }
+
+    static void PaintStroke(List<Subpath> path, GState gs, ContentAnalysis result) {
+        double width = Math.Max(0.25, gs.LineWidth * gs.Ctm.Scale());
+        foreach (var sp in path) {
+            for (int i = 0; i + 1 < sp.Points.Count; i++) {
+                var p0 = sp.Points[i]; var p1 = sp.Points[i + 1];
+                if (Math.Abs(p0[0] - p1[0]) < 0.05 && Math.Abs(p0[1] - p1[1]) < 0.05) continue; // zero-length
+                result.Lines.Add(new Line { X0 = p0[0], Y0 = p0[1], X1 = p1[0], Y1 = p1[1], Color = gs.StrokeColor, Width = width });
+            }
+        }
+    }
+
+    static GState Clone(GState g) { return new GState { Ctm = g.Ctm, FillColor = g.FillColor, StrokeColor = g.StrokeColor, LineWidth = g.LineWidth }; }
     static double N(List<PVal> ops, int i) { return i < ops.Count ? ops[i].AsNumber() : 0; }
 
     static void EmitTextRun(List<PVal> operands, ContentAnalysis result, GState gs, Mat tm, double fontSize, string op) {

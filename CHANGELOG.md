@@ -5,6 +5,7 @@
 ### Added
 
 - **Build Template from PDF**: pick any PDF plus a cover-page number, and the app scans every page, groups them by recurring visual role (ordinary body text, chart/exhibit, full-bleed divider, image-only), and generates a `.idml` template with one master spread per role plus a cover — ready to select and build reports with. Implemented as a from-scratch, dependency-free PDF reader (`src/PdfAnalyzer.cs`, `src/PdfContentAnalyzer.cs`, `src/PdfTemplateSpecBuilder.cs`) so the app stays a single self-contained executable with no Python/Node runtime requirement. The page-role classification is rule-based (background color, image coverage, text density/size) rather than statistical, so it stays predictable but can still misclassify an unusual page; margins/colors are still approximate since there is no real font-metrics table behind the width estimate.
+- **Strip Text from PDF**: rebuilds every page of a PDF in InDesign with all text removed, keeping images, chart line-art and rule lines (rectangles *and* stroked lines/borders -- the content-stream analyzer now tracks path construction and stroke paint operators, not just filled rectangles) in their original positions. Real embedded images are exported and placed (JPEG directly; simple uncompressed/Flate 8-bit Gray/RGB/CMYK raster decoded by hand into PNG); other image formats (JPEG2000, CCITT fax, indexed palettes) are skipped with a count logged. A per-page cap (300 vector objects) guards against decorative/textured pages blowing up build time.
 
 ### Changed
 
