@@ -136,33 +136,33 @@ public sealed class ReportLayout : Form {
     void BuildTemplateFromPdf(){
         string pdfPath;
         using(OpenFileDialog d=new OpenFileDialog()){d.Filter="PDF files|*.pdf";if(d.ShowDialog(this)!=DialogResult.OK)return;pdfPath=d.FileName;}
-        int coverPage,bodyPage;
+        int coverPage;
         using(Form dlg=new Form()){
             dlg.Text="Build Template from PDF";dlg.FormBorderStyle=FormBorderStyle.FixedDialog;dlg.StartPosition=FormStartPosition.CenterScreen;
-            dlg.ClientSize=new Size(360,190);dlg.MaximizeBox=false;dlg.MinimizeBox=false;dlg.Font=new Font("Segoe UI",10);
+            dlg.ClientSize=new Size(360,170);dlg.MaximizeBox=false;dlg.MinimizeBox=false;dlg.Font=new Font("Segoe UI",10);
             Label l1=new Label();l1.Text="Cover page number:";l1.SetBounds(20,20,190,24);dlg.Controls.Add(l1);
             NumericUpDown coverBox=new NumericUpDown();coverBox.Minimum=1;coverBox.Maximum=100000;coverBox.Value=1;coverBox.SetBounds(220,18,110,28);dlg.Controls.Add(coverBox);
-            Label l2=new Label();l2.Text="Body/text page number:";l2.SetBounds(20,56,190,24);dlg.Controls.Add(l2);
-            NumericUpDown bodyBox=new NumericUpDown();bodyBox.Minimum=1;bodyBox.Maximum=100000;bodyBox.Value=2;bodyBox.SetBounds(220,54,110,28);dlg.Controls.Add(bodyBox);
-            Label note=new Label();note.Text="Pick an ordinary text page (not the cover or a photo/divider page) so margins and colors are measured from typical body content.";note.SetBounds(20,90,320,56);dlg.Controls.Add(note);
-            Button ok=new Button();ok.Text="Build";ok.SetBounds(160,150,90,32);ok.DialogResult=DialogResult.OK;dlg.Controls.Add(ok);
-            Button cancel=new Button();cancel.Text="Cancel";cancel.SetBounds(258,150,82,32);cancel.DialogResult=DialogResult.Cancel;dlg.Controls.Add(cancel);
+            Label note=new Label();note.Text="Every other page is scanned automatically and grouped into the recurring page styles found (ordinary text, chart/exhibit, full-bleed divider) so the generated template covers all of them, each as its own master spread.";note.SetBounds(20,54,320,80);dlg.Controls.Add(note);
+            Button ok=new Button();ok.Text="Build";ok.SetBounds(160,132,90,32);ok.DialogResult=DialogResult.OK;dlg.Controls.Add(ok);
+            Button cancel=new Button();cancel.Text="Cancel";cancel.SetBounds(258,132,82,32);cancel.DialogResult=DialogResult.Cancel;dlg.Controls.Add(cancel);
             dlg.AcceptButton=ok;dlg.CancelButton=cancel;
             if(dlg.ShowDialog(this)!=DialogResult.OK)return;
-            coverPage=(int)coverBox.Value;bodyPage=(int)bodyBox.Value;
+            coverPage=(int)coverBox.Value;
         }
         string engine=Path.Combine(root,"Build-Template-From-PDF.jsx");
         if(!File.Exists(engine)){MessageBox.Show(this,"Build-Template-From-PDF.jsx is missing.");return;}
         string folder;
         try{folder=Path.Combine(SettingsStore.Folder,"Generated Templates","Template-"+DateTime.Now.ToString("yyyyMMdd-HHmmss"));Directory.CreateDirectory(folder);}catch(Exception ex){MessageBox.Show(this,ex.Message);return;}
-        Busy(true);AddLog("Measuring "+Path.GetFileName(pdfPath)+" (cover page "+coverPage+", body page "+bodyPage+")...");
-        Thread worker=new Thread(delegate(){RunTemplateBuild(pdfPath,coverPage,bodyPage,engine,folder);});
+        Busy(true);AddLog("Scanning all pages of "+Path.GetFileName(pdfPath)+" (cover page "+coverPage+")...");
+        Thread worker=new Thread(delegate(){RunTemplateBuild(pdfPath,coverPage,engine,folder);});
         worker.SetApartmentState(ApartmentState.STA);worker.IsBackground=true;worker.Start();
     }
-    void RunTemplateBuild(string pdfPath,int coverPage,int bodyPage,string engine,string folder){
+    void RunTemplateBuild(string pdfPath,int coverPage,string engine,string folder){
         object app=null;bool success=false;string message="";string idmlPath=Path.Combine(folder,"Template.idml");
         try{
-            Dictionary<string,object> spec=PdfTemplateSpecBuilder.BuildSpec(pdfPath,coverPage,bodyPage);
+            Dictionary<string,object> spec=PdfTemplateSpecBuilder.BuildMultiSpec(pdfPath,coverPage);
+            object masters;spec.TryGetValue("masters",out masters);int masterCount=masters is System.Collections.ICollection?((System.Collections.ICollection)masters).Count:0;
+            AddLog("Found "+masterCount+" recurring page style(s) across "+Convert.ToString(spec.ContainsKey("totalPages")?spec["totalPages"]:"?")+" pages.");
             spec["outputIdml"]=idmlPath;
             spec["outputIndd"]=Path.Combine(folder,"Template.indd");
             spec["outputPreviewPdf"]=Path.Combine(folder,"Template-preview.pdf");

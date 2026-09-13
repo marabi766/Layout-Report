@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Build Template from PDF**: pick any PDF plus a cover-page and body-page number, and the app measures page size, margins and colors (including gradient/photo cover backgrounds) and generates a matching Cover + Body-Master `.idml` template, ready to select and build reports with. Implemented as a from-scratch, dependency-free PDF reader (`src/PdfAnalyzer.cs`, `src/PdfContentAnalyzer.cs`, `src/PdfTemplateSpecBuilder.cs`) so the app stays a single self-contained executable with no Python/Node runtime requirement.
+- **Build Template from PDF**: pick any PDF plus a cover-page number, and the app scans every page, groups them by recurring visual role (ordinary body text, chart/exhibit, full-bleed divider, image-only), and generates a `.idml` template with one master spread per role plus a cover — ready to select and build reports with. Implemented as a from-scratch, dependency-free PDF reader (`src/PdfAnalyzer.cs`, `src/PdfContentAnalyzer.cs`, `src/PdfTemplateSpecBuilder.cs`) so the app stays a single self-contained executable with no Python/Node runtime requirement. The page-role classification is rule-based (background color, image coverage, text density/size) rather than statistical, so it stays predictable but can still misclassify an unusual page; margins/colors are still approximate since there is no real font-metrics table behind the width estimate.
 
 ### Changed
 
