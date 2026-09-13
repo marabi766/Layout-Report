@@ -13,6 +13,7 @@ using System.Text;
 using System.Net;
 using System.Text.RegularExpressions;
 using System.Security.Cryptography;
+using PdfTemplate;
 
 [assembly: AssemblyTitle("Report Layout")]
 [assembly: AssemblyVersion("2.0.0.0")]
@@ -73,15 +74,17 @@ public sealed class ReportLayout : Form {
         tabs.Dock=DockStyle.Fill;Controls.Add(tabs);tabs.BringToFront();
         TabPage reportsPage=Page("Reports"),layoutPage=Page("Layout Settings"),detailsPage=Page("Cover & Details"),resultPage=Page("Results"),settingsPage=Page("Preferences"),logPage=Page("Log");
         locked.Add(reportsPage);locked.Add(layoutPage);locked.Add(detailsPage);locked.Add(settingsPage);
-        TableLayoutPanel panel=new TableLayoutPanel();panel.Dock=DockStyle.Fill;panel.ColumnCount=1;panel.RowCount=5;panel.RowStyles.Add(new RowStyle(SizeType.Absolute,44));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,44));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,42));panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,36));reportsPage.Controls.Add(panel);
+        TableLayoutPanel panel=new TableLayoutPanel();panel.Dock=DockStyle.Fill;panel.ColumnCount=1;panel.RowCount=6;panel.RowStyles.Add(new RowStyle(SizeType.Absolute,44));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,40));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,44));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,42));panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,36));reportsPage.Controls.Add(panel);
         panel.Controls.Add(PathRow("Select Template",template,delegate{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="InDesign templates|*.idml;*.indd;*.indt";if(d.ShowDialog(this)==DialogResult.OK)template.Text=d.FileName;}}),0,0);
-        panel.Controls.Add(PathRow("Output Folder",output,delegate{using(FolderBrowserDialog d=new FolderBrowserDialog()){if(d.ShowDialog(this)==DialogResult.OK)output.Text=d.SelectedPath;}}),0,1);
-        FlowLayoutPanel queueButtons=new FlowLayoutPanel();queueButtons.Dock=DockStyle.Fill;panel.Controls.Add(queueButtons,0,2);
+        FlowLayoutPanel templateActions=new FlowLayoutPanel();templateActions.Dock=DockStyle.Fill;panel.Controls.Add(templateActions,0,1);
+        ButtonAt(templateActions,"Build Template from PDF...",delegate{BuildTemplateFromPdf();});
+        panel.Controls.Add(PathRow("Output Folder",output,delegate{using(FolderBrowserDialog d=new FolderBrowserDialog()){if(d.ShowDialog(this)==DialogResult.OK)output.Text=d.SelectedPath;}}),0,2);
+        FlowLayoutPanel queueButtons=new FlowLayoutPanel();queueButtons.Dock=DockStyle.Fill;panel.Controls.Add(queueButtons,0,3);
         ButtonAt(queueButtons,"Select Reports",delegate{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="Word reports|*.docx";d.Multiselect=true;if(d.ShowDialog(this)==DialogResult.OK)foreach(string f in d.FileNames)queue.Rows.Add(f,"");}});
         ButtonAt(queueButtons,"Set Selected Title",delegate{if(queue.SelectedRows.Count==0){MessageBox.Show(this,"Select a report row first.","Report title");return;}queue.CurrentCell=queue.SelectedRows[0].Cells[1];queue.BeginEdit(true);});
         ButtonAt(queueButtons,"Remove Selected",delegate{foreach(DataGridViewRow r in queue.SelectedRows)queue.Rows.Remove(r);});ButtonAt(queueButtons,"Clear Queue",delegate{queue.Rows.Clear();});
-        Grid(queue);queue.ReadOnly=false;queue.Columns.Add("Report","DOCX report");queue.Columns.Add("Title","Report title — required and editable");queue.Columns[0].ReadOnly=true;panel.Controls.Add(queue,0,3);
-        keepGoing.Text="Continue with the next report if one fails";keepGoing.Checked=true;keepGoing.Dock=DockStyle.Fill;panel.Controls.Add(keepGoing,0,4);
+        Grid(queue);queue.ReadOnly=false;queue.Columns.Add("Report","DOCX report");queue.Columns.Add("Title","Report title — required and editable");queue.Columns[0].ReadOnly=true;panel.Controls.Add(queue,0,4);
+        keepGoing.Text="Continue with the next report if one fails";keepGoing.Checked=true;keepGoing.Dock=DockStyle.Fill;panel.Controls.Add(keepGoing,0,5);
         properties.Dock=DockStyle.Fill;properties.PropertySort=PropertySort.Categorized;properties.SelectedObject=layout;layoutPage.Controls.Add(properties);
         FlowLayoutPanel presetBar=new FlowLayoutPanel();presetBar.Dock=DockStyle.Top;presetBar.Height=84;layoutPage.Controls.Add(presetBar);
         presets.DropDownStyle=ComboBoxStyle.DropDownList;presets.Width=185;presets.Items.AddRange(new object[]{"Economic Report","Book Summary","Research Report","Compact Report"});presets.SelectedIndex=0;presetBar.Controls.Add(presets);
@@ -130,6 +133,70 @@ public sealed class ReportLayout : Form {
     void ImportPreset(){try{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="Layout preset (*.json)|*.json";if(d.ShowDialog(this)!=DialogResult.OK)return;LayoutOptions next=SettingsStore.Read<LayoutOptions>(d.FileName);if(next==null)throw new Exception("Empty preset.");next.Validate();layout=next;properties.SelectedObject=layout;AddLog("Preset imported: "+d.FileName);}}catch(Exception e){MessageBox.Show(this,e.Message,"Import preset");}}
     void ExportPreset(){try{Validate();layout.Validate();using(SaveFileDialog d=new SaveFileDialog()){d.Filter="Layout preset (*.json)|*.json";d.FileName="layout-preset.json";if(d.ShowDialog(this)==DialogResult.OK)SettingsStore.Write(d.FileName,layout);}}catch(Exception e){MessageBox.Show(this,e.Message,"Export preset");}}
     void ChooseColor(){GridItem item=properties.SelectedGridItem;if(item==null||item.PropertyDescriptor==null||(item.PropertyDescriptor.Name!="AccentColor"&&item.PropertyDescriptor.Name!="TableColor")){MessageBox.Show(this,"Select Heading color or Table color first.");return;}using(ColorDialog d=new ColorDialog()){if(d.ShowDialog(this)==DialogResult.OK){item.PropertyDescriptor.SetValue(layout,"#"+d.Color.R.ToString("X2")+d.Color.G.ToString("X2")+d.Color.B.ToString("X2"));properties.Refresh();}}}
+    void BuildTemplateFromPdf(){
+        string pdfPath;
+        using(OpenFileDialog d=new OpenFileDialog()){d.Filter="PDF files|*.pdf";if(d.ShowDialog(this)!=DialogResult.OK)return;pdfPath=d.FileName;}
+        int coverPage,bodyPage;
+        using(Form dlg=new Form()){
+            dlg.Text="Build Template from PDF";dlg.FormBorderStyle=FormBorderStyle.FixedDialog;dlg.StartPosition=FormStartPosition.CenterScreen;
+            dlg.ClientSize=new Size(360,190);dlg.MaximizeBox=false;dlg.MinimizeBox=false;dlg.Font=new Font("Segoe UI",10);
+            Label l1=new Label();l1.Text="Cover page number:";l1.SetBounds(20,20,190,24);dlg.Controls.Add(l1);
+            NumericUpDown coverBox=new NumericUpDown();coverBox.Minimum=1;coverBox.Maximum=100000;coverBox.Value=1;coverBox.SetBounds(220,18,110,28);dlg.Controls.Add(coverBox);
+            Label l2=new Label();l2.Text="Body/text page number:";l2.SetBounds(20,56,190,24);dlg.Controls.Add(l2);
+            NumericUpDown bodyBox=new NumericUpDown();bodyBox.Minimum=1;bodyBox.Maximum=100000;bodyBox.Value=2;bodyBox.SetBounds(220,54,110,28);dlg.Controls.Add(bodyBox);
+            Label note=new Label();note.Text="Pick an ordinary text page (not the cover or a photo/divider page) so margins and colors are measured from typical body content.";note.SetBounds(20,90,320,56);dlg.Controls.Add(note);
+            Button ok=new Button();ok.Text="Build";ok.SetBounds(160,150,90,32);ok.DialogResult=DialogResult.OK;dlg.Controls.Add(ok);
+            Button cancel=new Button();cancel.Text="Cancel";cancel.SetBounds(258,150,82,32);cancel.DialogResult=DialogResult.Cancel;dlg.Controls.Add(cancel);
+            dlg.AcceptButton=ok;dlg.CancelButton=cancel;
+            if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+            coverPage=(int)coverBox.Value;bodyPage=(int)bodyBox.Value;
+        }
+        string engine=Path.Combine(root,"Build-Template-From-PDF.jsx");
+        if(!File.Exists(engine)){MessageBox.Show(this,"Build-Template-From-PDF.jsx is missing.");return;}
+        string folder;
+        try{folder=Path.Combine(SettingsStore.Folder,"Generated Templates","Template-"+DateTime.Now.ToString("yyyyMMdd-HHmmss"));Directory.CreateDirectory(folder);}catch(Exception ex){MessageBox.Show(this,ex.Message);return;}
+        Busy(true);AddLog("Measuring "+Path.GetFileName(pdfPath)+" (cover page "+coverPage+", body page "+bodyPage+")...");
+        Thread worker=new Thread(delegate(){RunTemplateBuild(pdfPath,coverPage,bodyPage,engine,folder);});
+        worker.SetApartmentState(ApartmentState.STA);worker.IsBackground=true;worker.Start();
+    }
+    void RunTemplateBuild(string pdfPath,int coverPage,int bodyPage,string engine,string folder){
+        object app=null;bool success=false;string message="";string idmlPath=Path.Combine(folder,"Template.idml");
+        try{
+            Dictionary<string,object> spec=PdfTemplateSpecBuilder.BuildSpec(pdfPath,coverPage,bodyPage);
+            spec["outputIdml"]=idmlPath;
+            spec["outputIndd"]=Path.Combine(folder,"Template.indd");
+            spec["outputPreviewPdf"]=Path.Combine(folder,"Template-preview.pdf");
+            spec["outputLog"]=Path.Combine(folder,"build-log.txt");
+            spec["outputResult"]=Path.Combine(folder,"result.json");
+            string json=SettingsStore.Serialize(spec);
+            File.WriteAllText(Path.Combine(folder,"template-spec.json"),json,new UTF8Encoding(false));
+            if(spec.ContainsKey("warning"))AddLog("Note: "+spec["warning"]);
+            string source=Regex.Replace(File.ReadAllText(engine,Encoding.UTF8),@"(?m)^\s*#target[^\r\n]*","");
+            app=Connect();
+            app.GetType().InvokeMember("DoScript",BindingFlags.InvokeMethod|BindingFlags.OptionalParamBinding,null,app,new object[]{"var TEMPLATE_SPEC = "+json+";\r\n"+source,1246973031});
+            string resultPath=Path.Combine(folder,"result.json");
+            if(!File.Exists(resultPath))throw new Exception("InDesign did not record a result. Check build-log.txt in "+folder);
+            Dictionary<string,object> result=SettingsStore.Read<Dictionary<string,object>>(resultPath);
+            success=result.ContainsKey("ok")&&Convert.ToBoolean(result["ok"]);
+            message=Convert.ToString(result.ContainsKey("message")?result["message"]:"");
+            if(!success)throw new Exception(message);
+            if(!File.Exists(idmlPath))throw new Exception("Template.idml was not created.");
+        }catch(Exception e){
+            success=false;Exception actual=e;while(actual.InnerException!=null)actual=actual.InnerException;message=actual.Message;
+            AddLog("Template build failed: "+message);
+            string logPath=Path.Combine(folder,"build-log.txt");if(File.Exists(logPath))try{AddLog(File.ReadAllText(logPath));}catch{}
+        }finally{
+            if(app!=null&&Marshal.IsComObject(app))Marshal.ReleaseComObject(app);
+            bool ok=success;
+            UI(delegate{
+                Busy(false);
+                if(ok){
+                    template.Text=idmlPath;AddLog("Template built from PDF: "+idmlPath);
+                    MessageBox.Show(this,"A new template was built from the PDF and selected as your active template.\r\n\r\n"+idmlPath+"\r\n\r\nReview it in InDesign, then use Build Reports as usual.","Template Built",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                }
+            });
+        }
+    }
     void StartWork(bool validationOnly){
         UserSettings s;try{Validate();layout.Validate();s=Snapshot();if(!File.Exists(s.Template))throw new Exception("Select an existing InDesign template.");if(String.IsNullOrWhiteSpace(s.Output))throw new Exception("Select an output folder.");if(!validationOnly){if(s.Reports.Count==0)throw new Exception("Select one or more DOCX reports.");foreach(QueueItem q in s.Reports){if(!File.Exists(q.Report)||!q.Report.EndsWith(".docx",StringComparison.OrdinalIgnoreCase))throw new Exception("Missing DOCX report: "+q.Report);if(String.IsNullOrWhiteSpace(q.Title))throw new Exception("Enter a title for every report.");}}if(!File.Exists(Path.Combine(root,"Layout-Report.jsx")))throw new Exception("Layout-Report.jsx is missing.");}
         catch(Exception e){MessageBox.Show(this,e.Message,"Check settings");return;}
