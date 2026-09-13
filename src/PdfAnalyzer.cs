@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
@@ -397,5 +399,66 @@ public sealed class PdfDocument {
     }
 
     public PVal GetResources(PVal page) { return Get(page, "Resources"); }
+
+    double GetNum(PVal dict, string key, double fallback = 0) {
+        PVal v = Get(dict, key);
+        return (v != null && v.Kind == PKind.Number) ? v.Number : fallback;
+    }
+
+    // Writes an embedded image XObject out to its own file so InDesign can
+    // place() a real image (not a placeholder). DCTDecode (JPEG) bytes are
+    // already a complete JPEG file. A handful of simple uncompressed/
+    // Flate-compressed raster formats (8-bit Gray/RGB/CMYK, no color-space
+    // lookup table) are decoded by hand into a PNG. Anything else (JPX,
+    // CCITT fax, indexed palettes, ...) is skipped -- the caller falls back
+    // to a placeholder for that image.
+    public bool TryExportImage(PVal imageObj, string outPathNoExt, out string ext) {
+        ext = null;
+        PVal filter = imageObj.Get("Filter");
+        string filterName = null;
+        if (filter != null) {
+            if (filter.Kind == PKind.Name) filterName = filter.Text;
+            else if (filter.Kind == PKind.Array && filter.Items.Count > 0) filterName = Resolve(filter.Items[filter.Items.Count - 1]).Text;
+        }
+        try {
+            if (filterName == "DCTDecode") {
+                ext = "jpg";
+                File.WriteAllBytes(outPathNoExt + ".jpg", imageObj.StreamRaw ?? new byte[0]);
+                return true;
+            }
+            if (filterName == null || filterName == "FlateDecode") {
+                byte[] data = Decode(imageObj);
+                int width = (int)GetNum(imageObj, "Width");
+                int height = (int)GetNum(imageObj, "Height");
+                int bpc = (int)GetNum(imageObj, "BitsPerComponent", 8);
+                PVal cs = Get(imageObj, "ColorSpace");
+                string csName = cs != null ? cs.AsName() : null;
+                int comps = csName == "DeviceRGB" ? 3 : csName == "DeviceGray" ? 1 : csName == "DeviceCMYK" ? 4 : -1;
+                if (width <= 0 || height <= 0 || bpc != 8 || comps <= 0) return false;
+                int stride = width * comps;
+                if (data.Length < (long)stride * height) return false;
+                using (var bmp = new Bitmap(width, height, PixelFormat.Format24bppRgb)) {
+                    for (int y = 0; y < height; y++) {
+                        int rowBase = y * stride;
+                        for (int x = 0; x < width; x++) {
+                            int idx = rowBase + x * comps;
+                            Color color;
+                            if (comps == 3) color = Color.FromArgb(data[idx], data[idx + 1], data[idx + 2]);
+                            else if (comps == 1) color = Color.FromArgb(data[idx], data[idx], data[idx]);
+                            else {
+                                double c = data[idx] / 255.0, m = data[idx + 1] / 255.0, ye = data[idx + 2] / 255.0, k = data[idx + 3] / 255.0;
+                                color = Color.FromArgb((int)(255 * (1 - c) * (1 - k)), (int)(255 * (1 - m) * (1 - k)), (int)(255 * (1 - ye) * (1 - k)));
+                            }
+                            bmp.SetPixel(x, y, color);
+                        }
+                    }
+                    ext = "png";
+                    bmp.Save(outPathNoExt + ".png", ImageFormat.Png);
+                }
+                return true;
+            }
+        } catch { }
+        return false;
+    }
 }
 }

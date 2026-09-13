@@ -78,6 +78,7 @@ public sealed class ReportLayout : Form {
         panel.Controls.Add(PathRow("Select Template",template,delegate{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="InDesign templates|*.idml;*.indd;*.indt";if(d.ShowDialog(this)==DialogResult.OK)template.Text=d.FileName;}}),0,0);
         FlowLayoutPanel templateActions=new FlowLayoutPanel();templateActions.Dock=DockStyle.Fill;panel.Controls.Add(templateActions,0,1);
         ButtonAt(templateActions,"Build Template from PDF...",delegate{BuildTemplateFromPdf();});
+        ButtonAt(templateActions,"Strip Text from PDF...",delegate{StripTextFromPdf();});
         panel.Controls.Add(PathRow("Output Folder",output,delegate{using(FolderBrowserDialog d=new FolderBrowserDialog()){if(d.ShowDialog(this)==DialogResult.OK)output.Text=d.SelectedPath;}}),0,2);
         FlowLayoutPanel queueButtons=new FlowLayoutPanel();queueButtons.Dock=DockStyle.Fill;panel.Controls.Add(queueButtons,0,3);
         ButtonAt(queueButtons,"Select Reports",delegate{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="Word reports|*.docx";d.Multiselect=true;if(d.ShowDialog(this)==DialogResult.OK)foreach(string f in d.FileNames)queue.Rows.Add(f,"");}});
@@ -193,6 +194,57 @@ public sealed class ReportLayout : Form {
                 if(ok){
                     template.Text=idmlPath;AddLog("Template built from PDF: "+idmlPath);
                     MessageBox.Show(this,"A new template was built from the PDF and selected as your active template.\r\n\r\n"+idmlPath+"\r\n\r\nReview it in InDesign, then use Build Reports as usual.","Template Built",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                }
+            });
+        }
+    }
+    void StripTextFromPdf(){
+        string pdfPath;
+        using(OpenFileDialog d=new OpenFileDialog()){d.Filter="PDF files|*.pdf";if(d.ShowDialog(this)!=DialogResult.OK)return;pdfPath=d.FileName;}
+        if(MessageBox.Show(this,"This rebuilds every page of the PDF in InDesign with all text removed, keeping images, charts and rule lines in place. Large PDFs can take several minutes and produce a large file.\r\n\r\nContinue?","Strip Text from PDF",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+        string folder;
+        try{folder=Path.Combine(SettingsStore.Folder,"Visual Extracts","Extract-"+DateTime.Now.ToString("yyyyMMdd-HHmmss"));Directory.CreateDirectory(folder);Directory.CreateDirectory(Path.Combine(folder,"images"));}catch(Exception ex){MessageBox.Show(this,ex.Message);return;}
+        string engine=Path.Combine(root,"Build-Visuals-From-PDF.jsx");
+        if(!File.Exists(engine)){MessageBox.Show(this,"Build-Visuals-From-PDF.jsx is missing.");return;}
+        Busy(true);AddLog("Scanning "+Path.GetFileName(pdfPath)+" page by page (this can take a while for long PDFs)...");
+        Thread worker=new Thread(delegate(){RunVisualExtract(pdfPath,engine,folder);});
+        worker.SetApartmentState(ApartmentState.STA);worker.IsBackground=true;worker.Start();
+    }
+    void RunVisualExtract(string pdfPath,string engine,string folder){
+        object app=null;bool success=false;string message="";string idmlPath=Path.Combine(folder,"Visual-Rebuild.idml");
+        try{
+            Dictionary<string,object> spec=PdfVisualExtractor.ExtractAll(pdfPath,Path.Combine(folder,"images"),
+                delegate(int done,int total){AddLog("Extracted page "+done+" / "+total);});
+            AddLog("Exported "+spec["exportedImages"]+" image(s); "+spec["skippedImages"]+" skipped (unsupported format).");
+            spec["outputIdml"]=idmlPath;
+            spec["outputIndd"]=Path.Combine(folder,"Visual-Rebuild.indd");
+            spec["outputPreviewPdf"]=Path.Combine(folder,"Visual-Rebuild-preview.pdf");
+            spec["outputLog"]=Path.Combine(folder,"build-log.txt");
+            spec["outputResult"]=Path.Combine(folder,"result.json");
+            string json=SettingsStore.Serialize(spec);
+            AddLog("Rebuilding "+spec["totalPages"]+" page(s) in InDesign without text...");
+            string source=Regex.Replace(File.ReadAllText(engine,Encoding.UTF8),@"(?m)^\s*#target[^\r\n]*","");
+            app=Connect();
+            app.GetType().InvokeMember("DoScript",BindingFlags.InvokeMethod|BindingFlags.OptionalParamBinding,null,app,new object[]{"var VISUAL_SPEC = "+json+";\r\n"+source,1246973031});
+            string resultPath=Path.Combine(folder,"result.json");
+            if(!File.Exists(resultPath))throw new Exception("InDesign did not record a result. Check build-log.txt in "+folder);
+            Dictionary<string,object> result=SettingsStore.Read<Dictionary<string,object>>(resultPath);
+            success=result.ContainsKey("ok")&&Convert.ToBoolean(result["ok"]);
+            message=Convert.ToString(result.ContainsKey("message")?result["message"]:"");
+            if(!success)throw new Exception(message);
+            if(!File.Exists(idmlPath))throw new Exception("Visual-Rebuild.idml was not created.");
+        }catch(Exception e){
+            success=false;Exception actual=e;while(actual.InnerException!=null)actual=actual.InnerException;message=actual.Message;
+            AddLog("Text-strip rebuild failed: "+message);
+            string logPath=Path.Combine(folder,"build-log.txt");if(File.Exists(logPath))try{AddLog(File.ReadAllText(logPath));}catch{}
+        }finally{
+            if(app!=null&&Marshal.IsComObject(app))Marshal.ReleaseComObject(app);
+            bool ok=success;
+            UI(delegate{
+                Busy(false);
+                if(ok){
+                    AddLog("Text-free rebuild saved: "+idmlPath);
+                    if(MessageBox.Show(this,"Every page was rebuilt without text, keeping images/graphics in place.\r\n\r\n"+idmlPath+"\r\n\r\nOpen its folder now?","Rebuild Complete",MessageBoxButtons.YesNo,MessageBoxIcon.Information)==DialogResult.Yes)OpenPath(folder);
                 }
             });
         }
