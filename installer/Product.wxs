@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Report Layout Preview"
            Manufacturer="Mohammad Arabi"
-           Version="2.0.1"
+           Version="2.0.2"
            UpgradeCode="EFC4C3B4-1B62-4AB2-8970-136519A305E9"
            Language="1033"
            Compressed="yes"
