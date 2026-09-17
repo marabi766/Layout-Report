@@ -15,6 +15,7 @@ This preview adds all ten planned feature groups. Portable tests pass, including
 - **Select Reports**, **Select Template**, and **Build Reports**, with editable per-report titles
 - **Build Template from PDF**: scans every page of a reference PDF, groups them into the recurring page styles found (ordinary text, chart/exhibit, full-bleed divider, image-only), and generates a fresh `.idml` template with one master spread per style plus a cover (no PDF text or images are copied)
 - **Strip Text from PDF**: rebuilds every page of a PDF in InDesign with all text removed, keeping images, charts and rule lines (including stroked lines such as column dividers) in their original positions and sizes — a text-free visual starting point
+- **Thread Body Pages**: links the main text frame on each page of an existing `.indd` (e.g. one assembled from separate documents/pages, which InDesign never auto-threads) into one flowing story, over a page range you choose
 - Four built-in presets: Economic Report, Book Summary, Research Report, Compact Report
 - Editable layout settings, color picker, installed-font dropdowns, JSON preset import/export
 - Editable heading-number separator (default `-`, for example `11-2`) and explicit per-report titles
@@ -182,6 +183,7 @@ The bundled workflow uses IRNazanin for body text and Modam for headings, a Worl
 | `Build-Template-From-PDF.jsx` | Builds a Cover + Body-Master `.idml` from a template spec |
 | `src/PdfVisualExtractor.cs` | Per-page images/fills/rule lines for the text-free rebuild, with real image export |
 | `Build-Visuals-From-PDF.jsx` | Rebuilds every PDF page in InDesign from that extraction, with no text |
+| `Thread-Body-Pages.jsx` | Links each page's main text frame, in page order, over a chosen range |
 | `Build-and-Run.ps1` | Per-user build-from-source installation, compilation, icon, shortcuts |
 | `Start.vbs` / `Start.cmd` | Quiet and fallback launchers for the build-from-source path |
 | `installer/Product.wxs` | WiX source for the distributed MSI installer |

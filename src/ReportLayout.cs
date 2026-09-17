@@ -79,6 +79,7 @@ public sealed class ReportLayout : Form {
         FlowLayoutPanel templateActions=new FlowLayoutPanel();templateActions.Dock=DockStyle.Fill;panel.Controls.Add(templateActions,0,1);
         ButtonAt(templateActions,"Build Template from PDF...",delegate{BuildTemplateFromPdf();});
         ButtonAt(templateActions,"Strip Text from PDF...",delegate{StripTextFromPdf();});
+        ButtonAt(templateActions,"Thread Body Pages...",delegate{ThreadBodyPages();});
         panel.Controls.Add(PathRow("Output Folder",output,delegate{using(FolderBrowserDialog d=new FolderBrowserDialog()){if(d.ShowDialog(this)==DialogResult.OK)output.Text=d.SelectedPath;}}),0,2);
         FlowLayoutPanel queueButtons=new FlowLayoutPanel();queueButtons.Dock=DockStyle.Fill;panel.Controls.Add(queueButtons,0,3);
         ButtonAt(queueButtons,"Select Reports",delegate{using(OpenFileDialog d=new OpenFileDialog()){d.Filter="Word reports|*.docx";d.Multiselect=true;if(d.ShowDialog(this)==DialogResult.OK)foreach(string f in d.FileNames)queue.Rows.Add(f,"");}});
@@ -246,6 +247,62 @@ public sealed class ReportLayout : Form {
                     AddLog("Text-free rebuild saved: "+idmlPath);
                     if(MessageBox.Show(this,"Every page was rebuilt without text, keeping images/graphics in place.\r\n\r\n"+idmlPath+"\r\n\r\nOpen its folder now?","Rebuild Complete",MessageBoxButtons.YesNo,MessageBoxIcon.Information)==DialogResult.Yes)OpenPath(folder);
                 }
+            });
+        }
+    }
+    void ThreadBodyPages(){
+        string inddPath;
+        using(OpenFileDialog d=new OpenFileDialog()){d.Filter="InDesign document|*.indd";if(d.ShowDialog(this)!=DialogResult.OK)return;inddPath=d.FileName;}
+        int startPage,endPage;
+        using(Form dlg=new Form()){
+            dlg.Text="Thread Body Pages";dlg.FormBorderStyle=FormBorderStyle.FixedDialog;dlg.StartPosition=FormStartPosition.CenterScreen;
+            dlg.ClientSize=new Size(360,190);dlg.MaximizeBox=false;dlg.MinimizeBox=false;dlg.Font=new Font("Segoe UI",10);
+            Label l1=new Label();l1.Text="First page to thread:";l1.SetBounds(20,20,190,24);dlg.Controls.Add(l1);
+            NumericUpDown startBox=new NumericUpDown();startBox.Minimum=1;startBox.Maximum=100000;startBox.Value=2;startBox.SetBounds(220,18,110,28);dlg.Controls.Add(startBox);
+            Label l2=new Label();l2.Text="Last page to thread:";l2.SetBounds(20,56,190,24);dlg.Controls.Add(l2);
+            NumericUpDown endBox=new NumericUpDown();endBox.Minimum=1;endBox.Maximum=100000;endBox.Value=100000;endBox.SetBounds(220,54,110,28);dlg.Controls.Add(endBox);
+            Label note=new Label();note.Text="Links the first text frame found on each page, in page order. Existing threads elsewhere (e.g. a cover or a glossary grid) are left alone if you exclude those pages from the range. The value above the actual last page is fine -- it is clamped automatically.";note.SetBounds(20,90,320,70);dlg.Controls.Add(note);
+            Button ok=new Button();ok.Text="Thread";ok.SetBounds(160,164,90,32);ok.DialogResult=DialogResult.OK;dlg.Controls.Add(ok);
+            Button cancel=new Button();cancel.Text="Cancel";cancel.SetBounds(258,164,82,32);cancel.DialogResult=DialogResult.Cancel;dlg.Controls.Add(cancel);
+            dlg.AcceptButton=ok;dlg.CancelButton=cancel;
+            if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+            startPage=(int)startBox.Value;endPage=(int)endBox.Value;
+        }
+        string engine=Path.Combine(root,"Thread-Body-Pages.jsx");
+        if(!File.Exists(engine)){MessageBox.Show(this,"Thread-Body-Pages.jsx is missing.");return;}
+        string folder;
+        try{folder=Path.Combine(SettingsStore.Folder,"Thread Jobs","Job-"+DateTime.Now.ToString("yyyyMMdd-HHmmss"));Directory.CreateDirectory(folder);}catch(Exception ex){MessageBox.Show(this,ex.Message);return;}
+        Busy(true);AddLog("Threading "+Path.GetFileName(inddPath)+" from page "+startPage+" to "+endPage+"...");
+        Thread worker=new Thread(delegate(){RunThreadBodyPages(inddPath,startPage,endPage,engine,folder);});
+        worker.SetApartmentState(ApartmentState.STA);worker.IsBackground=true;worker.Start();
+    }
+    void RunThreadBodyPages(string inddPath,int startPage,int endPage,string engine,string folder){
+        object app=null;bool success=false;string message="";
+        try{
+            Dictionary<string,object> spec=new Dictionary<string,object>{
+                {"inddPath",inddPath},{"startPage",startPage},{"endPage",endPage},
+                {"outputResult",Path.Combine(folder,"result.json")},{"outputLog",Path.Combine(folder,"build-log.txt")},
+            };
+            string json=SettingsStore.Serialize(spec);
+            string source=Regex.Replace(File.ReadAllText(engine,Encoding.UTF8),@"(?m)^\s*#target[^\r\n]*","");
+            app=Connect();
+            app.GetType().InvokeMember("DoScript",BindingFlags.InvokeMethod|BindingFlags.OptionalParamBinding,null,app,new object[]{"var THREAD_SPEC = "+json+";\r\n"+source,1246973031});
+            string resultPath=Path.Combine(folder,"result.json");
+            if(!File.Exists(resultPath))throw new Exception("InDesign did not record a result. Check build-log.txt in "+folder);
+            Dictionary<string,object> result=SettingsStore.Read<Dictionary<string,object>>(resultPath);
+            success=result.ContainsKey("ok")&&Convert.ToBoolean(result["ok"]);
+            message=Convert.ToString(result.ContainsKey("message")?result["message"]:"");
+            if(!success)throw new Exception(message);
+        }catch(Exception e){
+            success=false;Exception actual=e;while(actual.InnerException!=null)actual=actual.InnerException;message=actual.Message;
+            AddLog("Threading failed: "+message);
+            string logPath=Path.Combine(folder,"build-log.txt");if(File.Exists(logPath))try{AddLog(File.ReadAllText(logPath));}catch{}
+        }finally{
+            if(app!=null&&Marshal.IsComObject(app))Marshal.ReleaseComObject(app);
+            bool ok=success;string finalMessage=message;
+            UI(delegate{
+                Busy(false);
+                if(ok){AddLog("Threading done: "+finalMessage);MessageBox.Show(this,finalMessage+"\r\n\r\nThe document was saved.","Threading Complete",MessageBoxButtons.OK,MessageBoxIcon.Information);}
             });
         }
     }
