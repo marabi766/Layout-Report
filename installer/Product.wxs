@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Report Layout"
            Manufacturer="Mohammad Arabi"
-           Version="1.1.1"
+           Version="1.1.2"
            UpgradeCode="86A1606A-A704-45C9-8B7C-029BE0CE10A8"
            Language="1033"
            Compressed="yes"
@@ -44,6 +44,9 @@
 
       <Component Id="CMP_Jsx" Directory="INSTALLFOLDER" Guid="0B7B6A7B-2B7C-4B1E-9C1B-2B6B7A6B7B02">
         <File Id="FILE_Jsx" Source="files\Layout-Report.jsx" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_ThreadJsx" Directory="INSTALLFOLDER" Guid="0B7B6A7B-2B7C-4B1E-9C1B-2B6B7A6B7B23">
+        <File Id="FILE_ThreadJsx" Source="files\Thread-Body-Pages.jsx" KeyPath="yes" />
       </Component>
       <Component Id="CMP_Ico" Directory="ASSETSFOLDER" Guid="0B7B6A7B-2B7C-4B1E-9C1B-2B6B7A6B7B03">
         <File Id="FILE_Ico" Source="files\assets\ReportLayout.ico" KeyPath="yes" />
