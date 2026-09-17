@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Report Layout Preview"
            Manufacturer="Mohammad Arabi"
-           Version="2.0.3"
+           Version="2.0.4"
            UpgradeCode="EFC4C3B4-1B62-4AB2-8970-136519A305E9"
            Language="1033"
            Compressed="yes"
@@ -50,6 +50,9 @@
       </Component>
       <Component Id="CMP_VisualsJsx" Directory="INSTALLFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F24">
         <File Id="FILE_VisualsJsx" Source="files\Build-Visuals-From-PDF.jsx" KeyPath="yes" />
+      </Component>
+      <Component Id="CMP_ThreadJsx" Directory="INSTALLFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F25">
+        <File Id="FILE_ThreadJsx" Source="files\Thread-Body-Pages.jsx" KeyPath="yes" />
       </Component>
       <Component Id="CMP_Ico" Directory="ASSETSFOLDER" Guid="4605F5FD-7442-4FC9-8771-A411C1B36F03">
         <File Id="FILE_Ico" Source="files\assets\ReportLayout.ico" KeyPath="yes" />
